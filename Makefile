@@ -15,11 +15,13 @@ test :
 check-types:
 	mypy hmm/
 
+
+## coverage                       : make test coverage report in htmlcov/
 .PHONY : coverage
 coverage :
 	rm -rf .coverage htmlcov
 	coverage run -m pytest hmm/tests/
-	coverage html
+	coverage html  --omit=/nix/store*
 
 
 ## yapf                           : Force google format on all python code

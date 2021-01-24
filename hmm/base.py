@@ -197,11 +197,6 @@ class HMM:
             self.p_y_by_state[1:],  # indices t,j
             self.gamma_inv[1:]  # index t
         )
-        # Move this to a subclass
-        for t in numpy.where(self.gamma_inv[1:] < 0)[0]:
-            u_sum -= numpy.einsum(
-                'i,j,j->ij', self.alpha[t], self.beta[t + 1],
-                self.p_y_by_state[t + 1]) * self.gamma_inv[t + 1]
         self.alpha *= self.beta  # Saves allocating new array for result
         alpha_beta = self.alpha
         self.p_state_time_average = alpha_beta.sum(axis=0)
@@ -293,7 +288,7 @@ class HMM:
             length: Length of returned array
 
         Keyword Args:
-            mask: If mask.shape[t, i] is False, state i is forbidden at time t.
+            mask: If mask[t, i] is False, state i is forbidden at time t.
 
         Returns:
             Sequence of states
@@ -319,8 +314,7 @@ class HMM:
 
         Returns:
             states, where states[t] is the state at time t, and
-                outs_transpose[t][i] is the ith component of the
-                observation at time t.
+                outs
 
         """
 
@@ -330,9 +324,11 @@ class HMM:
         # Set up cumulative distributions
         cum_init = numpy.cumsum(self.p_state_time_average[0])
         cum_tran = numpy.cumsum(self.p_state2state.values(), axis=1)
+
         # cum_rand generates random integers from a cumulative distribution
         def cum_rand(cum):
             return numpy.searchsorted(cum, self.rng.random())
+
         # Select initial state
         i = cum_rand(cum_init)
         # Select subsequent states and call model to generate observations
@@ -340,7 +336,7 @@ class HMM:
             states.append(i)
             outs.append(self.y_mod.random_out(i))
             i = cum_rand(cum_tran[i])
-        return (states, numpy.array(outs))  # End of simulate()
+        return (states, outs)
 
     def link(self: HMM, here: int, there: int, p: float):
         """Create (or remove) a link between state "here" and state "there".

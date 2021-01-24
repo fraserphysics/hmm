@@ -1,5 +1,6 @@
 """test_base.py Tests hmm.base
 
+hmm.base.Observation is tested with hmm.scalar.Observation in test_scalar.py
 $ python -m pytest hmm/tests/test_base.py
 
 """
@@ -15,15 +16,12 @@ import scipy.linalg
 import hmm.scalar
 import hmm.base
 
-c2s = {
-    0: [0, 1],
-    1: [2, 3],
-    2: [4, 5],
-}
-p_s0 = np.ones(6) / 6.0
-p_s0_ergodic = np.ones(6) / 6.0
-P_SS = scipy.linalg.circulant([0, 0, 0, 0, 0.5, 0.5])
-p_ys = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
+n_states = 6
+n_t = 1000
+p_state_initial = np.ones(n_states) / float(n_states)
+p_state_time_average = np.ones(n_states) / float(n_states)
+p_state2state = scipy.linalg.circulant([0, 0, 0, 0, 0.5, 0.5])
+model_py_state = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
 
 
 class TestHMM(unittest.TestCase):
@@ -32,17 +30,24 @@ class TestHMM(unittest.TestCase):
 
     def setUp(self):
         self.rng = numpy.random.default_rng(0)
-        self.y_model = hmm.base.Observation(p_ys.copy(), self.rng)
+        self.y_model = hmm.base.Observation(model_py_state.copy(), self.rng)
         self.hmm = hmm.base.HMM(
-            p_s0.copy(),  # Initial distribution of states
-            p_s0_ergodic.copy(),  # Stationary distribution of states
-            P_SS.copy(),  # State transition probabilities
+            p_state_initial.copy(),  # Initial distribution of states
+            p_state_time_average.copy(),  # Stationary distribution of states
+            p_state2state.copy(),  # State transition probabilities
             self.y_model,
             rng=self.rng,
         )
+        self.mask = np.ones((n_t, n_states), np.bool)
+        for t in range(n_t):
+            self.mask[t, t % n_states] = False
         self.mods = (self.hmm,)  # More mods after getting models in C built
-        self.s, y = self.hmm.simulate(1000)
-        self.y = np.array(y.reshape((-1)), np.int32)
+        self.s, y = self.hmm.simulate(n_t)
+        self.y = np.array(y, np.int32).reshape((-1))
+
+    def test_state_simulate(self):
+        self.hmm.state_simulate(n_t)
+        self.hmm.state_simulate(n_t, self.mask)
 
     def test_initialize_y_model(self):
         """ Also exercises self.mod.state_simulate.
@@ -63,14 +68,13 @@ class TestHMM(unittest.TestCase):
         """
 
         mod = hmm.base.HMM(
-            p_s0.copy(),  # Initial distribution of states
-            p_s0_ergodic.copy(),  # Stationary distribution of states
-            P_SS.copy(),  # State transition probabilities
+            p_state_initial.copy(),  # Initial distribution of states
+            p_state_time_average.copy(),  # Stationary distribution of states
+            p_state2state.copy(),  # State transition probabilities
             self.y_model,
         )
         states, y = mod.simulate(10)
         self.assertTrue(len(states) == 10)
-        self.assertTrue(len(y.reshape((-1))) == 10)
 
     def test_decode(self):
         """
@@ -93,10 +97,10 @@ class TestHMM(unittest.TestCase):
             self.assertTrue(log_like[i - 1] < log_like[i])
         # Check that trained model is close to true model
         numpy.testing.assert_allclose(self.hmm.y_mod.model_py_state.values(),
-                                      p_ys,
+                                      model_py_state,
                                       atol=0.15)
         numpy.testing.assert_allclose(self.hmm.p_state2state.values(),
-                                      P_SS,
+                                      p_state2state,
                                       atol=0.2)
         # Check that other models give results close to self.hmm
         for mod in self.mods[1:]:
@@ -119,16 +123,15 @@ class TestHMM(unittest.TestCase):
         for i in range(1, len(log_like)):
             self.assertTrue(log_like[i - 1] < log_like[i])
         numpy.testing.assert_allclose(mod.y_mod.model_py_state.values(),
-                                      p_ys,
+                                      model_py_state,
                                       atol=0.14)
         numpy.testing.assert_allclose(mod.p_state2state.values(),
-                                      P_SS,
+                                      p_state2state,
                                       atol=0.17)
 
     def foo_test_multi_train(self):
         for mod in self.mods:
             self.multi_train(mod)
-
 
 
 A_ = numpy.array([[0, 2, 2.0], [2, 2, 4.0], [6, 2, 2.0]])

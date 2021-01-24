@@ -44,6 +44,7 @@ class TestObservations(unittest.TestCase):
         for i in range(n):
             y[i] = (i + i % 2 + i % 3 + i % 5) % 2
         self.y = y
+        self.y64 = np.array(y, dtype=np.int64)
         self.w = np.array(20 * [0, 0, 1.0]).reshape((n, 3))
         self.w[0, :] = [1, 0, 0]
         self.w[3, :] = [0, 1, 0]
@@ -52,9 +53,9 @@ class TestObservations(unittest.TestCase):
                                                    self.numpy_rng)
         self.y_mod_base = hmm.base.Observation(p_ys, self.numpy_rng)
         # discrete model and observations from scalar
-        self.y_mod_y_scalar = (self.y_mod_scalar, (self.y,))
+        self.y_mod_y_scalar = (self.y_mod_scalar, (self.y64,))
         # discrete model and observations from base
-        self.y_mod_y_base = (self.y_mod_base, self.y)
+        self.y_mod_y_base = (self.y_mod_base, self.y64)
 
     def calc(self, y_mod, y):
         y_mod.observe(y)
