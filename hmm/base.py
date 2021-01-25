@@ -344,7 +344,7 @@ class HMM:
         Args:
             here: One index of element to modify
             there: Other index of element to modify
-            p: Weight or probability of linke
+            p: Weight or probability of link
 
         The strength of the link is a function of both the argument
         "p" and the existing conditional probabilities of state

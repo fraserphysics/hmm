@@ -1,7 +1,7 @@
 SHELL = bash  # To make popd available
 
 ## docs/api/build/html/index.html : Documentation for the api
-docs/api/build/html/index.html : docs/api/source/conf.py apidoc_source
+docs/api/build/html/index.html : docs/api/source/conf.py
 	pushd docs/api; rm -rf build; make html; popd
 	@echo To view: firefox --no-remote docs/api/build/html/index.html
 
