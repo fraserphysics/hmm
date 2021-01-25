@@ -112,11 +112,9 @@ class Observation(hmm.base.Observation):
         # ToDo: Test this concatenation
         return numpy.concatenate(y_segs)
 
-    def reestimate(
-        self: Observation,
-        w: numpy.ndarray,
-        warn: typing.Optional[bool] = True,
-    ):
+    def reestimate(self: Observation,
+                   w: numpy.ndarray,
+                   warn: typing.Optional[bool] = True):
         """
         Estimate new model parameters
 
@@ -176,10 +174,8 @@ class Gauss(Observation):
     def __str__(self: Gauss) -> str:
         return "    mu=%s\nvar=%s " % (self.mu, self.var)
 
-    def random_out(
-        self: Gauss,
-        s: int,
-    ) -> float:
+    # Ignore: Super returned int
+    def random_out(self: Gauss, s: int) -> float:  # type: ignore
         """ For simulation, draw a random observation given state s
 
         Args:
@@ -189,7 +185,7 @@ class Gauss(Observation):
             Random observation drawn from distribution conditioned on state s
 
         """
-        return [(self._rng.normal(self.mu[s], self.sigma[s]))]
+        return (self._rng.normal(self.mu[s], self.sigma[s]))
 
     def calculate(self: Gauss,) -> numpy.ndarray:
         """
@@ -204,7 +200,8 @@ class Gauss(Observation):
         self._observed_py_state = numpy.exp(-d * d / (2 * self.var)) * self.norm
         return self._observed_py_state
 
-    def reestimate(self: Gauss, w: numpy.ndarray):
+    # Ignore: Super has optional argument warn
+    def reestimate(self: Gauss, w: numpy.ndarray):  # type: ignore
         """
         Estimate new model parameters.  self._y already assigned
 

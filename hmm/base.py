@@ -428,7 +428,8 @@ class Observation:
         """
         self._y = ys
         self.n_y = len(self._y)
-        self._observed_py_state = numpy.empty((self.n_y, self.n_states))
+        self._observed_py_state = numpy.empty((self.n_y, self.n_states),
+                                              dtype=numpy.float64)
         return self.n_y
 
     def calculate(self: Observation) -> numpy.ndarray:
@@ -442,7 +443,10 @@ class Observation:
             self._observed_py_state
 
         """
-        self._observed_py_state[:, :] = self.model_py_state.likelihoods(self._y)
+
+        # mypy: Unsupported target for indexed assignment ("None")
+        self._observed_py_state[:, :] = self.model_py_state.likelihoods(  #  type: ignore
+            self._y)
         return self._observed_py_state
 
     def random_out(self: Observation, state: int) -> int:
@@ -455,8 +459,8 @@ class Observation:
             conditioned on the state
 
         """
-        return (numpy.searchsorted(self._cummulative_y[state],
-                                   self._rng.random()),)
+        return numpy.searchsorted(self._cummulative_y[state],
+                                  self._rng.random())
 
     def reestimate(
         self: Observation,
