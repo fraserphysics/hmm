@@ -73,7 +73,7 @@ class TestHMM(unittest.TestCase):
             p_state2state.copy(),  # State transition probabilities
             self.y_model,
         )
-        states, y = mod.simulate(10)
+        states, y = mod.simulate(10)  # pylint: disable = unused-variable
         self.assertTrue(len(states) == 10)
 
     def test_decode(self):

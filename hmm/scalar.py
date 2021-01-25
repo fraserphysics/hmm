@@ -1,5 +1,7 @@
 """ scalar.py: Scalar observation models for the Hidden Markov Models in base.py.
 """
+# pylint: disable = attribute-defined-outside-init
+
 from __future__ import annotations  # Enables, eg, (self: HMM,
 
 import typing
@@ -70,8 +72,8 @@ class Observation(hmm.base.Observation):
     """
     _parameter_keys = set(('model_py_state',))
 
-    def __init__(self: Observation, parameters: dict,
-                 rng: numpy.random.Generator):
+    def __init__(  # pylint: disable = super-init-not-called
+            self: Observation, parameters: dict, rng: numpy.random.Generator):
         assert set(parameters.keys()) == self._parameter_keys
         for key, value in parameters.items():
             setattr(self, key, value)
@@ -79,9 +81,10 @@ class Observation(hmm.base.Observation):
         self.n_states = self._normalize()
         self._observed_py_state = None
 
-    def observe(self: Observation,
-                y_segs: tuple,
-                n_y: typing.Optional[int] = None) -> int:
+    def observe(  # pylint: disable = arguments-differ
+            self: Observation,
+            y_segs: tuple,
+            n_y: typing.Optional[int] = None) -> int:
         """ Attach measurement sequence[s] to self.
 
         Args:
@@ -105,7 +108,7 @@ class Observation(hmm.base.Observation):
         return self.n_y
 
     def _concatenate(self: Observation, y_segs: tuple):
-        assert isinstance(y_segs, tuple) or isinstance(y_segs, list)
+        assert isinstance(y_segs, (tuple, list))
         if len(y_segs) == 1:
             return y_segs[0]
         assert len(y_segs) > 1
@@ -175,7 +178,8 @@ class Gauss(Observation):
         return "    mu=%s\nvar=%s " % (self.mu, self.var)
 
     # Ignore: Super returned int
-    def random_out(self: Gauss, s: int) -> float:  # type: ignore
+    def random_out(  # pylint: disable = arguments-differ
+            self: Gauss, s: int) -> float:
         """ For simulation, draw a random observation given state s
 
         Args:
@@ -201,7 +205,8 @@ class Gauss(Observation):
         return self._observed_py_state
 
     # Ignore: Super has optional argument warn
-    def reestimate(self: Gauss, w: numpy.ndarray):  # type: ignore
+    def reestimate(  # pylint: disable = arguments-differ
+            self: Gauss, w: numpy.ndarray):
         """
         Estimate new model parameters.  self._y already assigned
 

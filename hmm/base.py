@@ -8,6 +8,7 @@ Classes:
     :py:class:`HMM`:
         A Hidden Markov Model implementation
 """
+# pylint: disable = attribute-defined-outside-init
 from __future__ import annotations  # Enables, eg, (self: HMM,
 
 import typing  # For type hints
@@ -191,7 +192,7 @@ class HMM:
         # u_sum[i,j] = \sum_{t:gamma[t]>0} alpha[t,i] * beta[t+1,j] *
         # p_y_by_state[t+1]/gamma[t+1]
         u_sum = numpy.einsum(
-            'ti,tj,tj,t->ij',  # Specifies the i,j indices and sum over t
+            "ti,tj,tj,t->ij",  # Specifies the i,j indices and sum over t
             self.alpha[:-1],  # indices t,i
             self.beta[1:],  # indices t,j
             self.p_y_by_state[1:],  # indices t,j
@@ -222,7 +223,7 @@ class HMM:
         This implements the Viterbi algorithm.
         """
 
-        if not (y is None):
+        if not y is None:
             # Calculate likelihood of data given state
             self.n_y = self.y_mod.observe(y)
             self.p_y_by_state = self.y_mod.calculate()
@@ -332,7 +333,7 @@ class HMM:
         # Select initial state
         i = cum_rand(cum_init)
         # Select subsequent states and call model to generate observations
-        for t in range(length):
+        for _ in range(length):
             states.append(i)
             outs.append(self.y_mod.random_out(i))
             i = cum_rand(cum_tran[i])
@@ -445,8 +446,7 @@ class Observation:
         """
 
         # mypy: Unsupported target for indexed assignment ("None")
-        self._observed_py_state[:, :] = self.model_py_state.likelihoods(  #  type: ignore
-            self._y)
+        self._observed_py_state[:, :] = self.model_py_state.likelihoods(self._y)
         return self._observed_py_state
 
     def random_out(self: Observation, state: int) -> int:

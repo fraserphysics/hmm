@@ -36,7 +36,10 @@ test_standards :
 
 ## pylintrc                       : Fetch Google's rules for python style
 pylintrc:
-	wget --no-check-certificate https://google.github.io/styleguide/pylintrc
+	git -c http.sslVerify=false clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+	cp depot_tools/pylintrc .
+	echo Edit: max-line-length=86, no pylint_quotes
+
 
 ## clean                          : Remove machine generated files
 .PHONY : clean

@@ -48,18 +48,11 @@ class Test_lint(BaseClass):
 
 class Test_doc(BaseClass):  # TODO: Change Foo to Test
     def test_api_doc(self):
-        '''Test that docstrings are OK.  Alternatively: "cd docs/api; make
-        html"
+        '''Test that docstrings are OK.  Alternatively:
+        "cd docs/api; make html"
 
         '''
 
-        args = 'make apidoc_source'.split()
-        with subprocess.Popen(args,
-                              cwd=self.root,
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT) as pipe:
-            pipe.wait()
-            self.assertEqual(pipe.returncode, 0)
         with subprocess.Popen('make html'.split(),
                             cwd=os.path.join(self.root, 'docs', 'api'),
                               stdout=subprocess.PIPE,
