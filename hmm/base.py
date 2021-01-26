@@ -314,8 +314,8 @@ class HMM:
             length: Number of time steps to simulate
 
         Returns:
-            states, where states[t] is the state at time t, and
-                outs
+            (states, outs) where states[t] is the state at time t, and
+                outs[t] is the output at time t.
 
         """
 
@@ -405,9 +405,12 @@ class Observation:
     """
 
     def __init__(self: Observation, model_py_state: numpy.ndarray,
-                 rng: numpy.random.Generator):
+                 rng: numpy.random.Generator=None):
         self.model_py_state = model_py_state
-        self._rng = rng
+        if rng is None:
+            self._rng = numpy.random.default_rng()
+        else:
+            self._rng = rng
         self.n_states = self._normalize()
         self._observed_py_state = None
 
