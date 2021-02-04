@@ -1,6 +1,5 @@
 """test_base.py Tests hmm.base
 
-hmm.base.Observation is tested with hmm.scalar.Observation in test_scalar.py
 $ python -m pytest hmm/tests/test_base.py
 
 """
@@ -13,8 +12,62 @@ import numpy.random
 
 import scipy.linalg
 
-import hmm.scalar
 import hmm.extensions
+import hmm.base
+
+class TestObservations(unittest.TestCase):
+    """ Test Observation in modules extensions and base
+    """
+
+    def setUp(self):
+        self.numpy_rng = numpy.random.default_rng(0)  # 0 is seed
+        p_ys = hmm.base.Prob(numpy.array([[0, 1], [1, 1], [1, 3.0]]))
+        p_ys.normalize()
+        n = 20
+        y = np.empty(n, dtype=np.int32)
+        for i in range(n):
+            y[i] = (i + i % 2 + i % 3 + i % 5) % 2
+        self.y = y
+        self.y64 = np.array(y, dtype=np.int64)
+        self.w = np.array(20 * [0, 0, 1.0]).reshape((n, 3))
+        self.w[0, :] = [1, 0, 0]
+        self.w[3, :] = [0, 1, 0]
+        self.ys = (y[5:], y[3:7], y[:4])
+        self.y_mod_extensions = hmm.extensions.Observation({'model_py_state': p_ys},
+                                                   self.numpy_rng)
+        self.y_mod_base = hmm.base.Observation(p_ys, self.numpy_rng)
+        # discrete model and observations from extensions
+        self.y_mod_y_extensions = (self.y_mod_extensions, (self.y64,))
+        # discrete model and observations from base
+        self.y_mod_y_base = (self.y_mod_base, self.y64)
+
+    def calc(self, y_mod, y):
+        y_mod.observe(y)
+        py = y_mod.calculate()[2:4]
+        numpy.testing.assert_almost_equal(py, [[0, 0.5, 0.25], [1, 0.5, 0.75]])
+
+    def test_calc(self):
+        for y_mod, y in (self.y_mod_y_extensions, self.y_mod_y_base):
+            self.calc(y_mod, y)
+
+    def test_join(self):
+        self.y_mod_extensions.observe(self.ys)
+        numpy.testing.assert_equal(self.y_mod_extensions.t_seg, [0, 15, 19, 23])
+
+    def reestimate(self, y_mod, y):
+        y_mod.observe(y)
+        y_mod.calculate()
+        y_mod.reestimate(self.w)
+        numpy.testing.assert_almost_equal([[1, 0], [0, 1], [5 / 9, 4 / 9]],
+                                          y_mod.model_py_state.values())
+
+    def test_reestimate(self):
+        for y_mod, y in (self.y_mod_y_extensions, self.y_mod_y_base):
+            self.reestimate(y_mod, y)
+
+    def test_str(self):
+        self.assertTrue(isinstance(self.y_mod_extensions.__str__(), str))
+
 
 n_states = 6
 model_py_state = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
@@ -28,7 +81,7 @@ class TestHMM(unittest.TestCase):
     """
 
     def setUp(self):
-        y_class = hmm.scalar.Observation
+        y_class = hmm.extensions.Observation
         p_ys = hmm.base.Prob(model_py_state.copy())
         y_class_parameters = {'model_py_state': p_ys}
         rng = numpy.random.default_rng(0)
@@ -91,7 +144,7 @@ class TestObservation_with_bundles(unittest.TestCase):
     """
 
     def setUp(self):
-        self.y_class = hmm.scalar.Observation
+        self.y_class = hmm.extensions.Observation
         p_ys = hmm.base.Prob(model_py_state.copy())
         self.y_class_parameters = {'model_py_state': p_ys}
         self.bundle2state = bundle2state

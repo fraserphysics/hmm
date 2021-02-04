@@ -11,6 +11,121 @@ import numpy.random
 
 import hmm.base
 
+class Observation(hmm.base.Observation):
+    """Ancestor of other observation classes
+
+    Args:
+        parameters: A dict {'p_ys': array}. Use dict for flexible sub-classes
+        rng: A numpy.random.Generator for simulation
+
+    Differences from hmm.base.Observation: 1. Observed data
+    is a list of sequences; 2. Parameters are passed as a dict to
+    support subclasses.
+
+    Public methods and attributes:
+
+    __init__
+
+    observe
+
+    random_out
+
+    calculate
+
+    reestimate
+
+    t_seg         Assigned by self.observe and used in multi_train
+
+    model_py_state because it's name is in an argument that's a dict
+
+    """
+    _parameter_keys = set(('model_py_state',))
+
+    def __init__(  # pylint: disable = super-init-not-called
+            self: Observation, parameters: dict, rng: numpy.random.Generator):
+        assert set(parameters.keys()) == self._parameter_keys
+        for key, value in parameters.items():
+            setattr(self, key, value)
+        self._rng = rng
+        self.n_states = self._normalize()
+        self._observed_py_state = None
+        self.n_times = None  # Flag to be set to an int by self.observe()
+
+    def __str__(self: Observation) -> str:
+        return_string = 'An {0} instance:\n'.format(type(self))
+        for key in self._parameter_keys:
+            return_string += '    {0}\n'.format(key)
+            return_string += '{0}\n'.format(getattr(self, key))
+        return return_string
+
+    def observe(  # pylint: disable = arguments-differ
+            self: Observation,
+            y_segs: tuple,
+            n_times: typing.Optional[int] = None) -> int:
+        """ Attach measurement sequence[s] to self.
+
+        Args:
+            y_segs: Any number of independent measurement segments
+
+        Returns:
+            Length of observation sequence
+        """
+        self._y = self._concatenate(y_segs)
+        t_seg = [0]  # List of segment boundaries in concatenated ys
+        length = 0
+        for seg in y_segs:
+            length += len(seg)
+            t_seg.append(length)
+        self.t_seg = numpy.array(t_seg)
+        assert self.t_seg[-1] == len(self._y)
+        self._observed_py_state = numpy.empty((len(self._y), self.n_states))
+        self.n_times = len(self._y)
+        if n_times:
+            assert n_times == self.n_times
+        return self.n_times
+
+    def _concatenate(self: Observation, y_segs: tuple):
+        """Concatenate observation segments each of which is a numpy array.
+
+        """
+        assert isinstance(y_segs, (tuple, list))
+        if len(y_segs) == 1:
+            return y_segs[0]
+        assert len(y_segs) > 1
+        # ToDo: Test this concatenation
+        return numpy.concatenate(y_segs)
+
+    def reestimate(self: Observation,
+                   w: numpy.ndarray,
+                   warn: typing.Optional[bool] = True):
+        """
+        Estimate new model parameters
+
+        Args:
+            w: w[t,s] = Prob(state[t]=s) given data and
+                 old model
+            warn: If True and y[0].dtype != numpy.int32, print
+                warning
+        """
+        if not (isinstance(self._y, numpy.ndarray) and
+                (self._y.dtype == numpy.int32)):
+            self._y = numpy.array(self._y, numpy.int32)
+            if warn:
+                print("Warning: reformatted y in reestimate")
+        assert self._y.dtype == numpy.int32 and self._y.shape == (
+            self.n_times,), """
+                y.dtype=%s, y.shape=%s""" % (
+                self._y.dtype,
+                self._y.shape,
+            )
+        for yi in range(self.model_py_state.shape[1]):
+            self.model_py_state.assign_col(
+                yi,
+                w.take(numpy.where(self._y == yi)[0], axis=0).sum(axis=0))
+        self.model_py_state.normalize()
+        self._cummulative_y = numpy.cumsum(self.model_py_state, axis=1)
+
+
 
 class HMM(hmm.base.HMM):
 
@@ -133,7 +248,7 @@ bundle values:{1}
 """.format(self.y, self.bundles)
 
 
-class Observation_with_bundles(hmm.scalar.Observation):
+class Observation_with_bundles(Observation):
     """Represents likelihood of states given observations by masking an
     underlying likelihood model.
 

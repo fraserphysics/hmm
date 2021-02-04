@@ -1,6 +1,8 @@
 """test_base.py Tests hmm.base
 
-hmm.base.Observation is tested with hmm.scalar.Observation in test_scalar.py
+hmm.base.Observation is tested with hmm.extensions.Observation in
+test_extensions.py
+
 $ python -m pytest hmm/tests/test_base.py
 
 """
@@ -13,7 +15,6 @@ import numpy.random
 
 import scipy.linalg
 
-import hmm.scalar
 import hmm.base
 
 n_states = 6
