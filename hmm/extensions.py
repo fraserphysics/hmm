@@ -32,19 +32,19 @@ class HMM(hmm.base.HMM):
         """
 
         log_like_list = []
-        self.n_y = self.y_mod.observe(ys)
+        self.n_times = self.y_mod.observe(ys)
         # t_seg is not returned by observe() to keep base.train simple
         t_seg = self.y_mod.t_seg
 
         # The times in the ith observation sequence satisfy t_seg[i]
         # \leq t < t_seg[i+1]
-        assert self.n_y > 1
-        assert self.n_y == t_seg[-1]
+        assert self.n_times > 1
+        assert self.n_times == t_seg[-1]
         assert t_seg[0] == 0
         n_seg = len(t_seg) - 1
-        alpha_all = numpy.empty((self.n_y, self.n_states))
-        beta_all = numpy.empty((self.n_y, self.n_states))
-        gamma_inv_all = numpy.empty((self.n_y,))
+        alpha_all = numpy.empty((self.n_times, self.n_states))
+        beta_all = numpy.empty((self.n_times, self.n_states))
+        gamma_inv_all = numpy.empty((self.n_times,))
         p_state_initial_all = numpy.empty((n_seg, self.n_states))
         # State probabilities at the beginning of each segment
         for seg in range(n_seg):
@@ -60,7 +60,7 @@ class HMM(hmm.base.HMM):
             p_y_all = self.y_mod.calculate()
             for seg in range(n_seg):
                 # Set up self to run forward/backward on a segment of y
-                self.n_y = t_seg[seg + 1] - t_seg[seg]
+                self.n_times = t_seg[seg + 1] - t_seg[seg]
                 self.alpha = alpha_all[t_seg[seg]:t_seg[seg + 1], :]
                 self.beta = beta_all[t_seg[seg]:t_seg[seg + 1], :]
                 self.p_y_by_state = p_y_all[t_seg[seg]:t_seg[seg + 1]]
@@ -71,14 +71,14 @@ class HMM(hmm.base.HMM):
                 # values for a segment of y
                 log_like = self.forward()  # Log Likelihood
                 if display:
-                    print("L[%d]=%7.4f " % (seg, log_like / self.n_y), end="")
+                    print("L[%d]=%7.4f " % (seg, log_like / self.n_times), end="")
                 log_like_iteration += log_like
                 self.backward()
                 p_state_initial_all[seg, :] = self.alpha[0] * self.beta[0]
                 self.gamma_inv[
                     0] = -1  # Don't fit state transitions between segments
 
-            log_like_list.append(log_like_iteration / self.n_y)
+            log_like_list.append(log_like_iteration / self.n_times)
             if iteration > 0 and log_like_list[iteration -
                                                1] >= log_like_list[iteration]:
                 print("""
@@ -209,10 +209,10 @@ class Observation_with_bundles(hmm.scalar.Observation):
         to attach observations stripped of bundle tags to self.y_mod.
 
         """
-        n_y = super().observe(bundle_segment_list)  # Assign self._y
-        _n_y = self.y_mod.observe([self._y.y])
-        assert n_y == _n_y
-        return n_y
+        n_times = super().observe(bundle_segment_list)  # Assign self._y
+        _n_times = self.y_mod.observe([self._y.y])
+        assert n_times == _n_times
+        return n_times
 
     def _concatenate(self: Observation_with_bundles,
                      bundle_segment_list: list) -> Bundle_segment:
@@ -251,14 +251,14 @@ class Observation_with_bundles(hmm.scalar.Observation):
         Probability(y|state)*Probability(state|bundle).
 
         """
-        assert self.n_y is not None  # Ensure that self.observe() was called
+        assert self.n_times is not None  # Ensure that self.observe() was called
 
         # Get unmasked likelihoods
         self._observed_py_state = self.y_mod.calculate()
 
         # Apply the right mask for the bundle at each time.  Note this
         # modifies self.y_mod._observed_py_state in place.
-        for t in range(self.n_y):
+        for t in range(self.n_times):
             self._observed_py_state[t, :] *= self.bundle_and_state[
                 self._y.bundles[t], :]
 

@@ -80,7 +80,7 @@ class Observation(hmm.base.Observation):
         self._rng = rng
         self.n_states = self._normalize()
         self._observed_py_state = None
-        self.n_y = None  # Flag to be set to an int by self.observe()
+        self.n_times = None  # Flag to be set to an int by self.observe()
 
     def __str__(self: Observation) -> str:
         return_string = 'An {0} instance:\n'.format(type(self))
@@ -92,7 +92,7 @@ class Observation(hmm.base.Observation):
     def observe(  # pylint: disable = arguments-differ
             self: Observation,
             y_segs: tuple,
-            n_y: typing.Optional[int] = None) -> int:
+            n_times: typing.Optional[int] = None) -> int:
         """ Attach measurement sequence[s] to self.
 
         Args:
@@ -110,10 +110,10 @@ class Observation(hmm.base.Observation):
         self.t_seg = numpy.array(t_seg)
         assert self.t_seg[-1] == len(self._y)
         self._observed_py_state = numpy.empty((len(self._y), self.n_states))
-        self.n_y = len(self._y)
-        if n_y:
-            assert n_y == self.n_y
-        return self.n_y
+        self.n_times = len(self._y)
+        if n_times:
+            assert n_times == self.n_times
+        return self.n_times
 
     def _concatenate(self: Observation, y_segs: tuple):
         """Concatenate observation segments each of which is a numpy array.
@@ -144,7 +144,7 @@ class Observation(hmm.base.Observation):
             if warn:
                 print("Warning: reformatted y in reestimate")
         assert self._y.dtype == numpy.int32 and self._y.shape == (
-            self.n_y,), """
+            self.n_times,), """
                 y.dtype=%s, y.shape=%s""" % (
                 self._y.dtype,
                 self._y.shape,
@@ -210,7 +210,7 @@ class Gauss(Observation):
             self.p_y[t,i] = P(y(t)|s(t)=i)
 
         """
-        assert self._y.reshape((-1, 1)).shape == (self.n_y, 1)
+        assert self._y.reshape((-1, 1)).shape == (self.n_times, 1)
         d = self.mu - self._y.reshape((-1, 1))
         self._observed_py_state = numpy.exp(-d * d / (2 * self.var)) * self.norm
         return self._observed_py_state

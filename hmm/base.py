@@ -8,6 +8,19 @@ Classes:
     :py:class:`HMM`:
         A Hidden Markov Model implementation
 """
+# Nomenclature:
+#
+# n_times: The number of time points in data for anobservable
+#
+# state_likelihood: At time t given observed data y[t] = y_ and
+# states[t] = s_, state_likelihood[t, s_] = Prob(y_ | s_)
+
+
+
+
+
+
+
 # pylint: disable = attribute-defined-outside-init
 from __future__ import annotations  # Enables, eg, (self: HMM,
 
@@ -162,12 +175,12 @@ class HMM:
         """
 
         log_like_list = []
-        self.n_y = self.y_mod.observe(y)
-        assert self.n_y > 1
+        self.n_times = self.y_mod.observe(y)
+        assert self.n_times > 1
         # Ensure allocation and size of alpha and gamma_inv
-        self.alpha = numpy.empty((self.n_y, self.n_states))
-        self.beta = numpy.empty((self.n_y, self.n_states))
-        self.gamma_inv = numpy.empty((self.n_y,))
+        self.alpha = numpy.empty((self.n_times, self.n_states))
+        self.beta = numpy.empty((self.n_times, self.n_states))
+        self.gamma_inv = numpy.empty((self.n_times,))
         for it in range(n_iter):
             self.p_y_by_state = self.y_mod.calculate()
             log_likelihood_per_step = self.forward() / len(self.p_y_by_state)
@@ -226,21 +239,21 @@ class HMM:
 
         if not y is None:
             # Calculate likelihood of data given state
-            self.n_y = self.y_mod.observe(y)
+            self.n_times = self.y_mod.observe(y)
             self.p_y_by_state = self.y_mod.calculate()
-        n_y, n_states = self.p_y_by_state.shape
+        n_times, n_states = self.p_y_by_state.shape
         assert self.n_states == n_states
-        assert n_y > 1
+        assert n_times > 1
 
         # Allocate working memory
-        best_predecessors = numpy.empty((self.n_y, self.n_states),
+        best_predecessors = numpy.empty((self.n_times, self.n_states),
                                         numpy.int32)  # Best predecessors
-        ss = numpy.ones((self.n_y, 1), numpy.int32)  # State sequence
+        ss = numpy.ones((self.n_times, 1), numpy.int32)  # State sequence
 
         # Use initial state distribution for first best_path_cost
         best_path_cost = self.p_y_by_state[0] * self.p_state_initial
 
-        for t in range(1, self.n_y):
+        for t in range(1, self.n_times):
             # p_state2state*outer(nu, p_y_by_state[t])
             cost = self.p_state2state.cost(best_path_cost, self.p_y_by_state[t])
             best_predecessors[t] = cost.argmax(axis=0)
@@ -250,7 +263,7 @@ class HMM:
 
         # Backtrack from best end state
         last_s = numpy.argmax(best_path_cost)
-        for t in range(self.n_y - 1, -1, -1):
+        for t in range(self.n_times - 1, -1, -1):
             ss[t] = last_s
             last_s = best_predecessors[t, last_s]
         return ss.flat  # End of decode()
@@ -266,16 +279,16 @@ class HMM:
             s_t: State sequence
 
         """
-        n_y = self.y_mod.observe(y)
+        n_times = self.y_mod.observe(y)
         if s_t is None:
-            s_t = numpy.array(self.state_simulate(n_y), numpy.int32)
-        alpha = numpy.zeros((n_y, self.n_states))
-        t = numpy.arange(n_y)
+            s_t = numpy.array(self.state_simulate(n_times), numpy.int32)
+        alpha = numpy.zeros((n_times, self.n_states))
+        t = numpy.arange(n_times)
         alpha[t, s_t] = 1
         self.alpha = alpha
         self.beta = alpha.copy()
-        self.gamma_inv = numpy.ones(n_y)
-        self.p_y_by_state = numpy.ones((n_y, self.n_states))
+        self.gamma_inv = numpy.ones(n_times)
+        self.p_y_by_state = numpy.ones((n_times, self.n_states))
         self.reestimate()
 
     def state_simulate(
@@ -298,7 +311,7 @@ class HMM:
         """
 
         self.p_y_by_state = self.rng.random((length, self.n_states))
-        self.n_y = length
+        self.n_times = length
         if mask is not None:
             self.p_y_by_state *= mask
 
@@ -442,10 +455,10 @@ class Observation:
             Length of observation sequence
         """
         self._y = ys
-        self.n_y = len(self._y)
-        self._observed_py_state = numpy.empty((self.n_y, self.n_states),
+        self.n_times = len(self._y)
+        self._observed_py_state = numpy.empty((self.n_times, self.n_states),
                                               dtype=numpy.float64)
-        return self.n_y
+        return self.n_times
 
     def calculate(self: Observation) -> numpy.ndarray:
         r"""
@@ -497,7 +510,7 @@ class Observation:
             if warn:
                 print("Warning: reformatted y in reestimate")
 
-        assert self._y.dtype == numpy.int32 and self._y.shape == (self.n_y,)
+        assert self._y.dtype == numpy.int32 and self._y.shape == (self.n_times,)
 
         # Loop over range of allowed values of y
         for yi in range(self.model_py_state.shape[1]):

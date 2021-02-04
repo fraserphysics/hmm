@@ -114,7 +114,7 @@ class TestGauss(unittest.TestCase):
         self.model_1_1.decode((self.y_train,))
 
     def test_train(self):
-        self.model_2_4.y_mod.observe((self.y_train,), n_y=100)
+        self.model_2_4.y_mod.observe((self.y_train,), n_times=100)
         self.model_2_4.train((self.y_train,), n_iter=15)
 
     def test_str(self):
