@@ -104,6 +104,7 @@ class HMM:
         last = numpy.copy(self.p_state_initial.reshape(-1))  # Copy
         for t in range(len(self.p_y_by_state)):
             last *= self.p_y_by_state[t]  # Element-wise multiply
+            assert last.sum() > 0
             self.gamma_inv[t] = 1 / last.sum()
             last *= self.gamma_inv[t]
             self.alpha[t, :] = last
@@ -337,7 +338,7 @@ class HMM:
             states.append(i)
             outs.append(self.y_mod.random_out(i))
             i = cum_rand(cum_tran[i])
-        return (states, outs)
+        return states, outs
 
     def link(self: HMM, here: int, there: int, p: float):
         """Create (or remove) a link between state "here" and state "there".
@@ -360,7 +361,7 @@ class HMM:
         self.p_state2state[here, there] = p
         self.p_state2state[here, :] /= self.p_state2state[here, :].sum()
 
-    def __str__(self) -> str:  # HMM instance
+    def __str__(self: HMM) -> str:  # HMM instance
         #save = numpy.get_printoptions
         # numpy.set_printoptions(precision=3)
         rv = """
@@ -379,6 +380,15 @@ p_state2state =
         )
         # numpy.set_printoptions(save)
         return rv[1:-1]
+
+    def deallocate(self: HMM):
+        """ Remove arrays assigned by train.
+
+        To be called before writing a model to disk
+        """
+        self.alpha = None
+        self.beta = None
+        self.gamma_inv = None
 
 
 class Observation:
@@ -400,12 +410,13 @@ class Observation:
 
     reestimate
 
-    model_py_state
+    model_py_state  # Todo: make this private
 
     """
 
-    def __init__(self: Observation, model_py_state: numpy.ndarray,
-                 rng: numpy.random.Generator=None):
+    def __init__(self: Observation,
+                 model_py_state: numpy.ndarray,
+                 rng: numpy.random.Generator = None):
         self.model_py_state = model_py_state
         if rng is None:
             self._rng = numpy.random.default_rng()

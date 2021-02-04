@@ -65,7 +65,7 @@ class Observation(hmm.base.Observation):
 
     reestimate
 
-    t_seg
+    t_seg         Assigned by self.observe and used in multi_train
 
     model_py_state because it's name is in an argument that's a dict
 
@@ -80,6 +80,14 @@ class Observation(hmm.base.Observation):
         self._rng = rng
         self.n_states = self._normalize()
         self._observed_py_state = None
+        self.n_y = None  # Flag to be set to an int by self.observe()
+
+    def __str__(self: Observation) -> str:
+        return_string = 'An {0} instance:\n'.format(type(self))
+        for key in self._parameter_keys:
+            return_string += '    {0}\n'.format(key)
+            return_string += '{0}\n'.format(getattr(self, key))
+        return return_string
 
     def observe(  # pylint: disable = arguments-differ
             self: Observation,
@@ -108,6 +116,9 @@ class Observation(hmm.base.Observation):
         return self.n_y
 
     def _concatenate(self: Observation, y_segs: tuple):
+        """Concatenate observation segments each of which is a numpy array.
+
+        """
         assert isinstance(y_segs, (tuple, list))
         if len(y_segs) == 1:
             return y_segs[0]
@@ -127,17 +138,17 @@ class Observation(hmm.base.Observation):
             warn: If True and y[0].dtype != numpy.int32, print
                 warning
         """
-        n_y = self.t_seg[-1]
         if not (isinstance(self._y, numpy.ndarray) and
                 (self._y.dtype == numpy.int32)):
             self._y = numpy.array(self._y, numpy.int32)
             if warn:
                 print("Warning: reformatted y in reestimate")
-        assert self._y.dtype == numpy.int32 and self._y.shape == (n_y,), """
+        assert self._y.dtype == numpy.int32 and self._y.shape == (
+            self.n_y,), """
                 y.dtype=%s, y.shape=%s""" % (
-            self._y.dtype,
-            self._y.shape,
-        )
+                self._y.dtype,
+                self._y.shape,
+            )
         for yi in range(self.model_py_state.shape[1]):
             self.model_py_state.assign_col(
                 yi,
