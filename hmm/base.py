@@ -465,14 +465,14 @@ class Observation:
 
     reestimate
 
-    model_py_state  # Todo: rename to _py_state and make it private
+    _py_state  # Todo: rename to _py_state and make it private
 
     """
 
     def __init__(self: Observation,
                  py_state: numpy.ndarray,
                  rng: numpy.random.Generator = None):
-        self.model_py_state = py_state
+        self._py_state = py_state
         if rng is None:
             self._rng = numpy.random.default_rng()
         else:
@@ -488,9 +488,9 @@ class Observation:
         Returns:
            (int): Number of states
         """
-        self.model_py_state = Prob(self.model_py_state)
-        self._cummulative_y = numpy.cumsum(self.model_py_state, axis=1)
-        return len(self.model_py_state)  # n_states
+        self._py_state = Prob(self._py_state)
+        self._cummulative_y = numpy.cumsum(self._py_state, axis=1)
+        return len(self._py_state)  # n_states
 
     def observe(self: Observation, y) -> int:
         """ Attach measurement sequence[s] to self.
@@ -522,9 +522,8 @@ class Observation:
 
         """
 
-        # Todo: type: ignore for mypy if line is short enough.
-        #  Otherwise yapf will break the line
-        self._likelihood[:, :] = self.model_py_state[:, self._y].T
+        # mypy objects ""Unsupported target for indexed assignment"
+        self._likelihood[:, :] = self._py_state[:, self._y].T  # type: ignore
         return self._likelihood
 
     def random_out(self: Observation, state: int) -> int:
@@ -546,7 +545,7 @@ class Observation:
         warn: typing.Optional[bool] = True,
     ):
         """
-        Estimate new model_py_state
+        Estimate new _py_state
 
         Args:
             w: w[t,s] = Prob(state[t]=s) given data and
@@ -565,14 +564,14 @@ class Observation:
         assert self._y.dtype == numpy.int32 and self._y.shape == (self.n_times,)
 
         # Loop over range of allowed values of y
-        for yi in range(self.model_py_state.shape[1]):
+        for yi in range(self._py_state.shape[1]):
             # yi was observed at times: numpy.where(self._y == yi)[0]
             # w.take(...) is the conditional state probabilities at those times
-            self.model_py_state.assign_col(
+            self._py_state.assign_col(
                 yi,
                 w.take(numpy.where(self._y == yi)[0], axis=0).sum(axis=0))
-        self.model_py_state.normalize()
-        self._cummulative_y = numpy.cumsum(self.model_py_state, axis=1)
+        self._py_state.normalize()
+        self._cummulative_y = numpy.cumsum(self._py_state, axis=1)
 
 
 class Prob(numpy.ndarray):

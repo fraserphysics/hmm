@@ -13,6 +13,7 @@ import scipy.linalg
 import hmm.observe_float
 import hmm.base
 
+
 class TestGauss(unittest.TestCase):
     """ Test hmm.observe_float.Gauss TODO: improve these tests.
     """
@@ -24,10 +25,11 @@ class TestGauss(unittest.TestCase):
         mu_1 = np.array([-1.0, 1.0])
         var_1 = np.ones(2)
         self.rng = numpy.random.default_rng(0)
-        y_mod = hmm.observe_float.Gauss({
-            'mu': mu_1.copy(),
-            'var': var_1.copy(),
-        }, self.rng)
+        y_mod = hmm.observe_float.Gauss(
+            {
+                'mu': mu_1.copy(),
+                'var': var_1.copy(),
+            }, self.rng)
         self.model_1_1 = hmm.base.HMM(p_s0, p_s0, p_ss, y_mod)
         self.model_2_4 = hmm.base.HMM(
             p_s0, p_s0, p_ss,
@@ -43,7 +45,7 @@ class TestGauss(unittest.TestCase):
 
     def test_train(self):
         self.model_2_4.y_mod.observe((self.y_train,), n_times=100)
-        self.model_2_4.train((self.y_train,), n_iter=15)
+        self.model_2_4.train((self.y_train,), n_iterations=15)
 
     def test_str(self):
         self.assertTrue(isinstance(self.model_1_1.y_mod.__str__(), str))

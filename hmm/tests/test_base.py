@@ -22,7 +22,7 @@ n_times = 1000
 p_state_initial = np.ones(n_states) / float(n_states)
 p_state_time_average = p_state_initial
 p_state2state = scipy.linalg.circulant([0, 0, 0, 0, 0.5, 0.5])
-model_py_state = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
+_py_state = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
 
 
 class TestHMM(unittest.TestCase):
@@ -31,7 +31,7 @@ class TestHMM(unittest.TestCase):
 
     def setUp(self):
         self.rng = numpy.random.default_rng(0)
-        self.y_model = hmm.base.Observation(model_py_state.copy(), self.rng)
+        self.y_model = hmm.base.Observation(_py_state.copy(), self.rng)
         self.hmm = hmm.base.HMM(
             p_state_initial.copy(),  # Initial distribution of states
             p_state_time_average.copy(),  # Stationary distribution of states
@@ -58,8 +58,8 @@ class TestHMM(unittest.TestCase):
     def test_initialize_y_model(self):
         """ Also exercises self.mod.state_simulate.
         """
-        temp1 = self.hmm.y_mod.model_py_state.copy()
-        temp2 = self.hmm.initialize_y_model(self.y).model_py_state
+        temp1 = self.hmm.y_mod._py_state.copy()
+        temp2 = self.hmm.initialize_y_model(self.y)._py_state
         temp3 = temp1 - temp2
         self.assertTrue(temp3.max() > 0.01)
         temp4 = temp3.sum(axis=1)
@@ -110,8 +110,8 @@ class TestHMM(unittest.TestCase):
         for i in range(1, len(log_like)):
             self.assertTrue(log_like[i - 1] < log_like[i])
         # Check that trained model is close to true model
-        numpy.testing.assert_allclose(self.hmm.y_mod.model_py_state.values(),
-                                      model_py_state,
+        numpy.testing.assert_allclose(self.hmm.y_mod._py_state.values(),
+                                      _py_state,
                                       atol=0.15)
         numpy.testing.assert_allclose(self.hmm.p_state2state.values(),
                                       p_state2state,
@@ -120,9 +120,8 @@ class TestHMM(unittest.TestCase):
         for mod in self.mods[1:]:
             log_like_mod = mod.train(self.y, n_iter=10, display=False)
             numpy.testing.assert_allclose(log_like_mod, log_like)
-            numpy.testing.assert_allclose(
-                mod.y_mod.model_py_state.values(),
-                self.hmm.y_mod.model_py_state.values())
+            numpy.testing.assert_allclose(mod.y_mod._py_state.values(),
+                                          self.hmm.y_mod._py_state.values())
             numpy.testing.assert_allclose(mod.p_state2state.values(),
                                           self.hmm.p_state2state.values())
 

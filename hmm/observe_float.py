@@ -30,6 +30,7 @@ See the file gpl.txt in the root directory of the hmm distribution
 or see <http://www.gnu.org/licenses/>.
 """
 
+
 class Gauss(hmm.extensions.Observation):
     r"""Scalar Gaussian observation model
 
@@ -85,8 +86,8 @@ class Gauss(hmm.extensions.Observation):
         """
         assert self._y.reshape((-1, 1)).shape == (self.n_times, 1)
         d = self.mu - self._y.reshape((-1, 1))
-        self._observed_py_state = numpy.exp(-d * d / (2 * self.var)) * self.norm
-        return self._observed_py_state
+        self._likelihood = numpy.exp(-d * d / (2 * self.var)) * self.norm
+        return self._likelihood
 
     # Ignore: Super has optional argument warn
     def reestimate(  # pylint: disable = arguments-differ

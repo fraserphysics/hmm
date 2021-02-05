@@ -11,6 +11,7 @@ import numpy.random
 
 import hmm.base
 
+
 class Observation(hmm.base.Observation):
     """Ancestor of other observation classes
 
@@ -36,10 +37,10 @@ class Observation(hmm.base.Observation):
 
     t_seg         Assigned by self.observe and used in multi_train
 
-    model_py_state because it's name is in an argument that's a dict
+    _py_state because it's name is in an argument that's a dict
 
     """
-    _parameter_keys = set(('model_py_state',))
+    _parameter_keys = set(('_py_state',))
 
     def __init__(  # pylint: disable = super-init-not-called
             self: Observation, parameters: dict, rng: numpy.random.Generator):
@@ -48,7 +49,7 @@ class Observation(hmm.base.Observation):
             setattr(self, key, value)
         self._rng = rng
         self.n_states = self._normalize()
-        self._observed_py_state = None
+        self._likelihood = None
         self.n_times = None  # Flag to be set to an int by self.observe()
 
     def __str__(self: Observation) -> str:
@@ -78,7 +79,7 @@ class Observation(hmm.base.Observation):
             t_seg.append(length)
         self.t_seg = numpy.array(t_seg)
         assert self.t_seg[-1] == len(self._y)
-        self._observed_py_state = numpy.empty((len(self._y), self.n_states))
+        self._likelihood = numpy.empty((len(self._y), self.n_states))
         self.n_times = len(self._y)
         if n_times:
             assert n_times == self.n_times
@@ -118,18 +119,62 @@ class Observation(hmm.base.Observation):
                 self._y.dtype,
                 self._y.shape,
             )
-        for yi in range(self.model_py_state.shape[1]):
-            self.model_py_state.assign_col(
+        for yi in range(self._py_state.shape[1]):
+            self._py_state.assign_col(
                 yi,
                 w.take(numpy.where(self._y == yi)[0], axis=0).sum(axis=0))
-        self.model_py_state.normalize()
-        self._cummulative_y = numpy.cumsum(self.model_py_state, axis=1)
-
+        self._py_state.normalize()
+        self._cummulative_y = numpy.cumsum(self._py_state, axis=1)
 
 
 class HMM(hmm.base.HMM):
 
-    def multi_train(self: HMM, ys, n_iter: int, display=True):
+    def reestimate(self: HMM):
+        """Phase of Baum Welch training that reestimates model parameters
+
+        Using values af self.alpha and self.beta calculated by
+        forward() and backward(), this code updates state transition
+        probabilities and initial state probabilities.  The call to
+        y_mod.reestimate() updates observation model parameters.
+
+        """
+
+        # u_sum[i,j] = \sum_{t:gamma_inv[t+1]>0} alpha[t,i] * beta[t+1,j] *
+        # state_likelihood[t+1,j]/gamma[t+1]
+        #
+        # The term at t is the conditional probability that there was
+        # a transition from state i to state j at time t given all of
+        # the observed data
+        u_sum = numpy.einsum(
+            "ti,tj,tj,t->ij",  # Specifies the i,j indices and sum over t
+            self.alpha[:-1],  # indices t,i
+            self.beta[1:],  # indices t,j
+            self.state_likelihood[1:],  # indices t,j
+            self.gamma_inv[1:]  # index t
+        )
+        # Correct for terms on segment boundaries
+        for t in numpy.nonzero(self.gamma_inv < 0)[0]:
+            assert self.gamma_inv[t] < 0
+            if t == 0:
+                continue
+            for i in range(self.n_states):
+                for j in range(self.n_states):
+                    u_sum[i, j] -= self.alpha[t - 1, i] * self.beta[
+                        t, j] * self.state_likelihood[t, j] * self.gamma_inv[t]
+
+        self.alpha *= self.beta  # Saves allocating a new array for
+        alpha_beta = self.alpha  # the result
+
+        self.p_state_time_average = alpha_beta.sum(axis=0)
+        self.p_state_initial = numpy.copy(alpha_beta[0])
+        for x in (self.p_state_time_average, self.p_state_initial):
+            x /= x.sum()
+        assert u_sum.shape == self.p_state2state.shape
+        self.p_state2state *= u_sum
+        self.p_state2state.normalize()
+        self.y_mod.reestimate(alpha_beta)
+
+    def multi_train(self: HMM, ys, n_iterations: int, display=True):
         """Train on more than one independent sequence of observations
 
         Args:
@@ -164,7 +209,7 @@ class HMM(hmm.base.HMM):
         # State probabilities at the beginning of each segment
         for seg in range(n_seg):
             p_state_initial_all[seg, :] = self.p_state_initial.copy()
-        for iteration in range(n_iter):
+        for iteration in range(n_iterations):
             if display:
                 print("i=%d: " % iteration, end="")
             log_like_iteration = 0.0
@@ -172,13 +217,14 @@ class HMM(hmm.base.HMM):
             # training segment and put the results in the
             # corresponding segement of the the alpha, beta and gamma
             # arrays.
-            p_y_all = self.y_mod.calculate()
+            likelihood_all = self.y_mod.calculate()
             for seg in range(n_seg):
                 # Set up self to run forward/backward on a segment of y
                 self.n_times = t_seg[seg + 1] - t_seg[seg]
                 self.alpha = alpha_all[t_seg[seg]:t_seg[seg + 1], :]
                 self.beta = beta_all[t_seg[seg]:t_seg[seg + 1], :]
-                self.p_y_by_state = p_y_all[t_seg[seg]:t_seg[seg + 1]]
+                self.state_likelihood = likelihood_all[t_seg[seg]:t_seg[seg +
+                                                                        1]]
                 self.gamma_inv = gamma_inv_all[t_seg[seg]:t_seg[seg + 1]]
                 self.p_state_initial = p_state_initial_all[seg, :]
 
@@ -186,20 +232,23 @@ class HMM(hmm.base.HMM):
                 # values for a segment of y
                 log_like = self.forward()  # Log Likelihood
                 if display:
-                    print("L[%d]=%7.4f " % (seg, log_like / self.n_times), end="")
+                    print("L[%d]=%7.4f " % (seg, log_like / self.n_times),
+                          end="")
                 log_like_iteration += log_like
                 self.backward()
                 p_state_initial_all[seg, :] = self.alpha[0] * self.beta[0]
-                self.gamma_inv[
-                    0] = -1  # Don't fit state transitions between segments
+                # Don't fit state transitions between segments
+                self.gamma_inv[0] = -1
 
             log_like_list.append(log_like_iteration / self.n_times)
-            if iteration > 0 and log_like_list[iteration -
-                                               1] >= log_like_list[iteration]:
-                print("""
-WARNING training is not monotonic: avg[{0}]={1} and avg[{2}]={3}
-""".format(iteration - 1, log_like_list[iteration - 1], iteration,
-                log_like_list[iteration]))
+            if iteration > 0:
+                ll = log_like_list[iteration]
+                ll_prev = log_like_list[iteration - 1]
+                delta = ll - ll_prev
+                if delta / abs(ll) < -1.0e-14:  # Todo: Why not zero?
+                    print("""
+WARNING training is not monotonic: avg[{0}]={1} and avg[{2}]={3} difference={4}
+""".format(iteration - 1, ll_prev, iteration, ll, delta))
             if display:
                 print("avg={0:10.7}f".format(log_like_list[-1]))
 
@@ -208,7 +257,7 @@ WARNING training is not monotonic: avg[{0}]={1} and avg[{2}]={3}
             self.alpha = alpha_all
             self.beta = beta_all
             self.gamma_inv = gamma_inv_all
-            self.p_y_by_state = p_y_all
+            self.state_likelihood = likelihood_all
             self.reestimate()
         self.p_state_initial[:] = p_state_initial_all.sum(axis=0)
         self.p_state_initial /= self.p_state_initial.sum()
@@ -369,15 +418,15 @@ class Observation_with_bundles(Observation):
         assert self.n_times is not None  # Ensure that self.observe() was called
 
         # Get unmasked likelihoods
-        self._observed_py_state = self.y_mod.calculate()
+        self._likelihood = self.y_mod.calculate()
 
         # Apply the right mask for the bundle at each time.  Note this
-        # modifies self.y_mod._observed_py_state in place.
+        # modifies self.y_mod._likelihood in place.
         for t in range(self.n_times):
-            self._observed_py_state[t, :] *= self.bundle_and_state[
+            self._likelihood[t, :] *= self.bundle_and_state[
                 self._y.bundles[t], :]
 
-        return self._observed_py_state
+        return self._likelihood
 
     def reestimate(self: Observation_with_bundles, w: numpy.ndarray):
         """Reestimate parameters of self.y_mod
