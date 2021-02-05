@@ -10,16 +10,15 @@ Classes:
 """
 # Nomenclature:
 #
-# n_times: The number of time points in data for anobservable
+# y:                Observations
 #
-# state_likelihood: At time t given observed data y[t] = y_ and
-# states[t] = s_, state_likelihood[t, s_] = Prob(y_ | s_)
-
-
-
-
-
-
+# y_mod:            An instance of an observation model, eg, Observation in this file
+#
+# n_times:          The number of time points in data for an observable
+#
+# state_likelihood: Given observed data y[t] = y_ and states[t] = s_,
+#                   state_likelihood[t, s_] = Prob(y_ | s_)
+#
 
 # pylint: disable = attribute-defined-outside-init
 from __future__ import annotations  # Enables, eg, (self: HMM,
@@ -29,7 +28,8 @@ import typing  # For type hints
 import numpy
 import numpy.random
 
-COPYRIGHT = """
+COPYRIGHT = """Copyright (c) 2021 Andrew M. Fraser
+
 This file is part of hmm.
 
 Hmm is free software: you can redistribute it and/or modify it
@@ -55,8 +55,11 @@ class HMM:
         p_state_time_average : Stationary distribution of states
         p_state2state : Probability of state given state:
             p_state2state[a, b] = Prob(s(1)=b|s(0)=a)
-        y_mod : Probability model for observations
-        rng : Generator with state
+        y_mod : Instance of class for probabilities of observations
+        rng : Numpy generator with state
+
+    p_state_time_average is averaged over training data.  It is not
+    the stationary distribution of p_state2state.
 
     Arguments are passed by reference and they are modified by some of
     the methods of HMM.
@@ -89,7 +92,7 @@ class HMM:
     # Todo: Perhaps handle short bursts of missing data, ie, sequences
     # are not independent.
 
-    def forward(self) -> float:  # HMM instance
+    def forward(self: HMM) -> float:
         """Recursively calculate state probabilities.
 
         Returns:
@@ -99,32 +102,36 @@ class HMM:
 
         On entry:
 
-        - self                is an HMM
+        - self                    is an HMM
 
-        - self.p_y_by_state   has been calculated
+        - self.state_likelihood   has been calculated
 
-        - self.alpha          has been allocated
+        - self.alpha              has been allocated
 
-        - self.gamma_inv      has been allocated
+        - self.gamma_inv          has been allocated
 
         On return:
 
-        - 1/self.gamma_inv[t] = Pr{y(t)=y(t)|y_0^{t-1}}
-        - self.alpha[t, i] = Pr{s(t)=i|y_0^t}
+        - 1/self.gamma_inv[t] = Prob{y(t)=y(t)|y_0^{t-1}}
+        - self.alpha[t, i] = Prob{s(t)=i|y_0^t}
 
         """
 
+        # last is a conditional distribution of state probabilities.
+        # What it is conditioned on changes as the calculations
+        # progress.
         last = numpy.copy(self.p_state_initial.reshape(-1))  # Copy
-        for t in range(len(self.p_y_by_state)):
-            last *= self.p_y_by_state[t]  # Element-wise multiply
+        for t in range(len(self.state_likelihood)):
+            last *= self.state_likelihood[t]  # Element-wise multiply
             assert last.sum() > 0
             self.gamma_inv[t] = 1 / last.sum()
             last *= self.gamma_inv[t]
             self.alpha[t, :] = last
-            self.p_state2state.step_forward(last)
-        return -(numpy.log(self.gamma_inv)).sum()  # End of forward()
+            # Could use Prob.step_forwar()
+            last[:] = numpy.dot(last, self.p_state2state)
+        return -(numpy.log(self.gamma_inv)).sum()
 
-    def backward(self):  # HMM instance
+    def backward(self: HMM) -> None:
         """
         Baum Welch backwards pass through state conditional likelihoods.
 
@@ -135,7 +142,7 @@ class HMM:
 
         - self               is an HMM
 
-        - self.p_y_by_state  has been calculated
+        - self.state_likelihood  has been calculated
 
         - self.gamma_inv     has been calculated by forward
 
@@ -146,19 +153,20 @@ class HMM:
         - For each state i, beta[t, i] = Pr{y_{t+1}^T|s(t)=i}/Pr{y_{t+1}^T}
 
         """
+        # last and beta are analogous to last in alpha in forward(),
+        # but the precise interpretations are more complicated.
         last = numpy.ones(self.n_states)
-        # iterate backwards through y
-        for t in range(len(self.p_y_by_state) - 1, -1, -1):
+        for t in range(len(self.state_likelihood) - 1, -1, -1):
             self.beta[t, :] = last
-            last *= self.p_y_by_state[t]
+            last *= self.state_likelihood[t]
             last *= self.gamma_inv[t]
-            self.p_state2state.step_back(last)
-        # End of backward()
+            # Could use Prob.step_back()
+            last[:] = numpy.dot(self.p_state2state, last)
 
     def train(
             self: HMM,
-            y,  # Type matches self.y_mod
-            n_iter: int = 1,
+            y,  #  Type must work for self.y_mod.observe(y)
+            n_iterations: int = 1,
             display: typing.Optional[bool] = True) -> list:
         """Use Baum-Welch algorithm to search for maximum likelihood
         model parameters.
@@ -174,46 +182,55 @@ class HMM:
 
         """
 
-        log_like_list = []
+        log_likelihood_list = []
+        # Attach observations to self.y_mod
         self.n_times = self.y_mod.observe(y)
         assert self.n_times > 1
-        # Ensure allocation and size of alpha and gamma_inv
+
+        # Allocate working arrays
         self.alpha = numpy.empty((self.n_times, self.n_states))
         self.beta = numpy.empty((self.n_times, self.n_states))
         self.gamma_inv = numpy.empty((self.n_times,))
-        for it in range(n_iter):
-            self.p_y_by_state = self.y_mod.calculate()
-            log_likelihood_per_step = self.forward() / len(self.p_y_by_state)
+
+        for iteration in range(n_iterations):
+            self.state_likelihood = self.y_mod.calculate()
+            log_likelihood_per_step = self.forward() / len(
+                self.state_likelihood)
             if display:
-                print("it= %d LLps= %7.3f" % (it, log_likelihood_per_step))
-            log_like_list.append(log_likelihood_per_step)
+                print("it= %d LLps= %7.3f" %
+                      (iteration, log_likelihood_per_step))
+            log_likelihood_list.append(log_likelihood_per_step)
             self.backward()
             self.reestimate()
-        return log_like_list  # End of train()
+
+        return log_likelihood_list
 
     def reestimate(self: HMM):
         """Phase of Baum Welch training that reestimates model parameters
 
-        Based on previously calculated values in self.alpha and
-        self.beta, the code here updates state transition
-        probabilities and initial state probabilities.  Contains a
-        call to the y_mod.reestimate method that updates observation
-        model parameters.
+        Using values af self.alpha and self.beta calculated by
+        forward() and backward(), this code updates state transition
+        probabilities and initial state probabilities.  The call to
+        y_mod.reestimate() updates observation model parameters.
 
         """
 
-        u_sum = numpy.zeros((self.n_states, self.n_states), numpy.float64)
-        # u_sum[i,j] = \sum_{t:gamma[t]>0} alpha[t,i] * beta[t+1,j] *
-        # p_y_by_state[t+1]/gamma[t+1]
+        # u_sum[i,j] = \sum_t alpha[t,i] * beta[t+1,j] *
+        # state_likelihood[t+1]/gamma[t+1]
+        #
+        # The term at t is the conditional probability that there was
+        # a transition from state i to state j at time t given all of
+        # the observed data
         u_sum = numpy.einsum(
             "ti,tj,tj,t->ij",  # Specifies the i,j indices and sum over t
             self.alpha[:-1],  # indices t,i
             self.beta[1:],  # indices t,j
-            self.p_y_by_state[1:],  # indices t,j
+            self.state_likelihood[1:],  # indices t,j
             self.gamma_inv[1:]  # index t
         )
-        self.alpha *= self.beta  # Saves allocating new array for result
-        alpha_beta = self.alpha
+        self.alpha *= self.beta  # Saves allocating a new array for
+        alpha_beta = self.alpha  # the result
+
         self.p_state_time_average = alpha_beta.sum(axis=0)
         self.p_state_initial = numpy.copy(alpha_beta[0])
         for x in (self.p_state_time_average, self.p_state_initial):
@@ -229,7 +246,7 @@ class HMM:
 
         Args:
             y: Observations with type for self.y_mod or None if
-                self.p_y_by_state.shape was assigned externally.
+                self.state_likelihood was assigned externally.
 
         Returns:
             Maximum likelihood state sequence
@@ -237,59 +254,73 @@ class HMM:
         This implements the Viterbi algorithm.
         """
 
-        if not y is None:
-            # Calculate likelihood of data given state
+        if y is None:
+            print("""Warning: No y argument to decode().  Assuming
+self.state_likelihood was assigned externally.""")
+        else:  # Calculate likelihood of data given state
             self.n_times = self.y_mod.observe(y)
-            self.p_y_by_state = self.y_mod.calculate()
-        n_times, n_states = self.p_y_by_state.shape
+            self.state_likelihood = self.y_mod.calculate()
+        n_times, n_states = self.state_likelihood.shape
         assert self.n_states == n_states
         assert n_times > 1
 
         # Allocate working memory
         best_predecessors = numpy.empty((self.n_times, self.n_states),
-                                        numpy.int32)  # Best predecessors
-        ss = numpy.ones((self.n_times, 1), numpy.int32)  # State sequence
+                                        numpy.int32)
+        best_state_sequence = numpy.ones((self.n_times, 1), numpy.int32)
 
         # Use initial state distribution for first best_path_cost
-        best_path_cost = self.p_y_by_state[0] * self.p_state_initial
+        best_path_cost = self.state_likelihood[0] * self.p_state_initial
 
         for t in range(1, self.n_times):
-            # p_state2state*outer(nu, p_y_by_state[t])
-            cost = self.p_state2state.cost(best_path_cost, self.p_y_by_state[t])
+            # cost = p_state2state*outer(best_path_cost, state_likelihood[t])
+            # Could use Prob.cost()
+            cost = (self.p_state2state.T *
+                    best_path_cost).T * self.state_likelihood[t]
             best_predecessors[t] = cost.argmax(axis=0)
             best_path_cost = numpy.choose(best_predecessors[t], cost)
-            assert best_path_cost.max() > 0
+            if best_path_cost.max() == 0:
+                raise ValueError(
+                    "Attempt to decode impossible observation sequence")
             best_path_cost /= best_path_cost.max()  # Prevent underflow
 
-        # Backtrack from best end state
-        last_s = numpy.argmax(best_path_cost)
+        # Find the best end state
+        previous_best_state = numpy.argmax(best_path_cost)
+
+        # Backtrack through best_predecessors to find the best
+        # sequence.
         for t in range(self.n_times - 1, -1, -1):
-            ss[t] = last_s
-            last_s = best_predecessors[t, last_s]
-        return ss.flat  # End of decode()
+            best_state_sequence[t] = previous_best_state
+            previous_best_state = best_predecessors[t, previous_best_state]
+        return best_state_sequence.flat
 
     def initialize_y_model(
-            self: HMM,
-            y,  #  Match self.y_mod
-            s_t: typing.Optional[numpy.ndarray] = None):
+        self: HMM,
+        y,  #  Type must work for self.y_mod.observe(y)
+        state_sequence: typing.Optional[numpy.ndarray] = None):
         """ Given data, make plausible y_model.
 
         Args:
             y: Observation sequence
-            s_t: State sequence
+            state_sequence: State sequence
 
         """
         n_times = self.y_mod.observe(y)
-        if s_t is None:
-            s_t = numpy.array(self.state_simulate(n_times), numpy.int32)
-        alpha = numpy.zeros((n_times, self.n_states))
+        if state_sequence is None:
+            state_sequence = numpy.array(self.state_simulate(n_times),
+                                         numpy.int32)
+
+        # Set alpha and beta so that in reestimate they enforce the
+        # simulated state sequence
+        self.alpha = numpy.zeros((n_times, self.n_states))
         t = numpy.arange(n_times)
-        alpha[t, s_t] = 1
-        self.alpha = alpha
-        self.beta = alpha.copy()
+        self.alpha[t, state_sequence] = 1
+        self.beta = self.alpha
+
         self.gamma_inv = numpy.ones(n_times)
-        self.p_y_by_state = numpy.ones((n_times, self.n_states))
+        self.state_likelihood = numpy.ones((n_times, self.n_states))
         self.reestimate()
+        return self.y_mod
 
     def state_simulate(
         self: HMM,
@@ -308,14 +339,24 @@ class HMM:
         Returns:
             Sequence of states
 
+        The returned sequence is not a draw from the random process
+        defined by the model.  However the sequence has probability >
+        0.
+
         """
 
-        self.p_y_by_state = self.rng.random((length, self.n_states))
+        self.state_likelihood = self.rng.random((length, self.n_states))
         self.n_times = length
         if mask is not None:
-            self.p_y_by_state *= mask
+            self.state_likelihood *= mask
 
-        return self.decode(None)  # End of state_simulate()
+        try:
+            state_sequence = self.decode(None)
+        except (ValueError):
+            raise ValueError(
+                "State_simulate given an impossible mask constraint")
+
+        return state_sequence
 
     def simulate(
         self: HMM,
@@ -337,20 +378,21 @@ class HMM:
         outs = []
         states = []
         # Set up cumulative distributions
-        cum_init = numpy.cumsum(self.p_state_time_average[0])
-        cum_tran = numpy.cumsum(self.p_state2state.values(), axis=1)
+        cumulative_initial = numpy.cumsum(self.p_state_time_average[0])
+        cumulative_transition = numpy.cumsum(self.p_state2state.values(),
+                                             axis=1)
 
         # cum_rand generates random integers from a cumulative distribution
         def cum_rand(cum):
             return numpy.searchsorted(cum, self.rng.random())
 
-        # Select initial state
-        i = cum_rand(cum_init)
+        # Select an initial state
+        state = cum_rand(cumulative_initial)
         # Select subsequent states and call model to generate observations
         for _ in range(length):
-            states.append(i)
-            outs.append(self.y_mod.random_out(i))
-            i = cum_rand(cum_tran[i])
+            states.append(state)
+            outs.append(self.y_mod.random_out(state))
+            state = cum_rand(cumulative_transition[state])
         return states, outs
 
     def link(self: HMM, here: int, there: int, p: float):
@@ -358,7 +400,7 @@ class HMM:
 
         Args:
             here: One index of element to modify
-            there: Other index of element to modify
+            there: Another index of element to modify
             p: Weight or probability of link
 
         The strength of the link is a function of both the argument
@@ -368,7 +410,8 @@ class HMM:
         state there given that the system is in state here.  The code
         sets p_state2state[here, there] to p and then re-normalizes.
         Set self.p_state2state itself if you need to set exact values.
-        You can use this method to modify topology before training.
+        You can use this method to modify the state topology before
+        training.
 
         """
         self.p_state2state[here, there] = p
@@ -377,13 +420,12 @@ class HMM:
     def __str__(self: HMM) -> str:  # HMM instance
         #save = numpy.get_printoptions
         # numpy.set_printoptions(precision=3)
-        rv = """
-%s with %d states
-p_state_initial         = %s
-p_state_time_average = %s
+        rv = """{0} with {1:d} states
+p_state_initial:      {2}
+p_state_time_average: {3}
 p_state2state =
-%s
-%s""" % (
+{4}
+{5}""".format(
             self.__class__,
             self.n_states,
             self.p_state_initial,
@@ -392,23 +434,23 @@ p_state2state =
             self.y_mod,
         )
         # numpy.set_printoptions(save)
-        return rv[1:-1]
+        return rv
 
     def deallocate(self: HMM):
         """ Remove arrays assigned by train.
 
         To be called before writing a model to disk
         """
-        self.alpha = None
-        self.beta = None
-        self.gamma_inv = None
+        del (self.alpha)
+        del (self.beta)
+        del (self.gamma_inv)
 
 
 class Observation:
-    """ Probability models for discrete observations from a finite set.
+    """ Probability models for observations drawn from a set of sequential integers.
 
     Args:
-        parameters: A dict {'p_ys': array}. Use dict for flexible sub-classes
+        py_state:  Conditional probability of y given state
         rng: A numpy.random.Generator for simulation
 
     Public methods and attributes:
@@ -423,58 +465,67 @@ class Observation:
 
     reestimate
 
-    model_py_state  # Todo: make this private
+    model_py_state  # Todo: rename to _py_state and make it private
 
     """
 
     def __init__(self: Observation,
-                 model_py_state: numpy.ndarray,
+                 py_state: numpy.ndarray,
                  rng: numpy.random.Generator = None):
-        self.model_py_state = model_py_state
+        self.model_py_state = py_state
         if rng is None:
             self._rng = numpy.random.default_rng()
         else:
             self._rng = rng
         self.n_states = self._normalize()
-        self._observed_py_state = None
+        # self._likelihood[t,s] = Prob(y[t]|state[t]=s).  Assigned in
+        # self.calculate().
+        self._likelihood = None
 
-    def _normalize(self: Observation):
+    def _normalize(self: Observation) -> int:
         """ Separate from __init__ to make subclass easy
+
+        Returns:
+           (int): Number of states
         """
         self.model_py_state = Prob(self.model_py_state)
         self._cummulative_y = numpy.cumsum(self.model_py_state, axis=1)
-        return len(self.model_py_state)
+        return len(self.model_py_state)  # n_states
 
-    def observe(self: Observation, ys) -> int:
+    def observe(self: Observation, y) -> int:
         """ Attach measurement sequence[s] to self.
 
         Args:
-            ys: A sequence of integer observations
+            y: A sequence of integer observations
 
         Returns:
             Length of observation sequence
         """
-        self._y = ys
+        self._y = y
         self.n_times = len(self._y)
-        self._observed_py_state = numpy.empty((self.n_times, self.n_states),
-                                              dtype=numpy.float64)
+
+        # Allocate here rather than in calculate() because calculate()
+        # may be called more often than observe().
+        self._likelihood = numpy.empty((self.n_times, self.n_states),
+                                       dtype=numpy.float64)
         return self.n_times
 
     def calculate(self: Observation) -> numpy.ndarray:
         r"""
-        Calculate likelihoods: self._observed_py_state[t,i] = P(y(t)|s(t)=i)
+        Calculate likelihoods: self._likelihood[t,i] = P(y(t)|state(t)=i)
 
         Returns:
-            p_y_by_state[t,i] \forall t \in [0,len(y)) and i \in [0,n_states)
+            state_likelihood[t,i] \forall t \in [0,n_times) and i \in [0,n_states)
 
         Assumes a previous call to measure has assigned self._y and allocated
-            self._observed_py_state
+            self._likelihood
 
         """
 
-        # mypy: Unsupported target for indexed assignment ("None")
-        self._observed_py_state[:, :] = self.model_py_state.likelihoods(self._y)
-        return self._observed_py_state
+        # Todo: type: ignore for mypy if line is short enough.
+        #  Otherwise yapf will break the line
+        self._likelihood[:, :] = self.model_py_state[:, self._y].T
+        return self._likelihood
 
     def random_out(self: Observation, state: int) -> int:
         """For simulation, draw a random observation given state s
@@ -504,6 +555,7 @@ class Observation:
                 warning
         """
 
+        # Todo: Move concerns about dtype to subclasses
         if not (isinstance(self._y, numpy.ndarray) and
                 (self._y.dtype == numpy.int32)):
             self._y = numpy.array(self._y, numpy.int32)
@@ -515,7 +567,7 @@ class Observation:
         # Loop over range of allowed values of y
         for yi in range(self.model_py_state.shape[1]):
             # yi was observed at times: numpy.where(self._y == yi)[0]
-            # w.take(...): the conditional state probabilities at those times
+            # w.take(...) is the conditional state probabilities at those times
             self.model_py_state.assign_col(
                 yi,
                 w.take(numpy.where(self._y == yi)[0], axis=0).sum(axis=0))
@@ -546,7 +598,7 @@ class Prob(numpy.ndarray):
     # See http://docs.scipy.org/doc/numpy/user/basics.subclassing.html
     def normalize(self: Prob) -> Prob:  # Prob instance
         """
-        Make each row a probability that sums to one
+        Make each row sum to one
 
         Returns:
             Self after normalization
@@ -559,7 +611,7 @@ class Prob(numpy.ndarray):
 
     def assign_col(self: Prob, i: int, col: numpy.ndarray):
         """
-        Replace column of self with data specified by the arguments
+        Replace a column of self with data specified by the arguments
 
         Args:
             i: Column index
@@ -610,7 +662,6 @@ class Prob(numpy.ndarray):
         """
         return (self.T * nu).T * py
 
-    # Todo: delete and do inline
     def step_forward(self: Prob, alpha: numpy.ndarray):
         """Replace values of argument a with matrix product a*self.
 

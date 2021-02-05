@@ -18,9 +18,9 @@ import scipy.linalg
 import hmm.base
 
 n_states = 6
-n_t = 1000
+n_times = 1000
 p_state_initial = np.ones(n_states) / float(n_states)
-p_state_time_average = np.ones(n_states) / float(n_states)
+p_state_time_average = p_state_initial
 p_state2state = scipy.linalg.circulant([0, 0, 0, 0, 0.5, 0.5])
 model_py_state = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
 
@@ -39,21 +39,31 @@ class TestHMM(unittest.TestCase):
             self.y_model,
             rng=self.rng,
         )
-        self.mask = np.ones((n_t, n_states), np.bool)
-        for t in range(n_t):
+        self.mask = np.ones((n_times, n_states), np.bool)
+        for t in range(n_times):
             self.mask[t, t % n_states] = False
         self.mods = (self.hmm,)  # More mods after getting models in C built
-        self.s, y = self.hmm.simulate(n_t)
+        self.s, y = self.hmm.simulate(n_times)
         self.y = np.array(y, np.int32).reshape((-1))
 
     def test_state_simulate(self):
-        self.hmm.state_simulate(n_t)
-        self.hmm.state_simulate(n_t, self.mask)
+        result1 = self.hmm.state_simulate(n_times)
+        result2 = self.hmm.state_simulate(n_times, self.mask)
+        for result in (result1, result2):
+            self.assertTrue(len(result) == n_times)
+            array = numpy.array(result)
+            self.assertTrue(array.min() == 0)
+            self.assertTrue(array.max() == n_states - 1)
 
     def test_initialize_y_model(self):
         """ Also exercises self.mod.state_simulate.
         """
-        self.hmm.initialize_y_model(self.y)
+        temp1 = self.hmm.y_mod.model_py_state.copy()
+        temp2 = self.hmm.initialize_y_model(self.y).model_py_state
+        temp3 = temp1 - temp2
+        self.assertTrue(temp3.max() > 0.01)
+        temp4 = temp3.sum(axis=1)
+        self.assertTrue(temp4.max() < 1e-9)  # Rows of each sum to one
 
     def test_link(self):
         """ Remove link from 0 to itself
@@ -62,7 +72,10 @@ class TestHMM(unittest.TestCase):
         self.assertTrue(self.hmm.p_state2state[0, 0] == 0.0)
 
     def test_str(self):
-        self.assertTrue(isinstance(self.hmm.__str__(), str))
+        string = self.hmm.__str__()
+        self.assertTrue(isinstance(string, str))
+        self.assertTrue(len(string) > 400)
+        self.assertTrue(len(string) < 500)
 
     def test_unseeded(self):
         """ Exercise initialization of HMM without supplying rng
@@ -83,7 +96,7 @@ class TestHMM(unittest.TestCase):
         """
         states = self.hmm.decode(self.y)
         wrong = np.where(states != self.s)[0]
-        self.assertTrue(len(wrong) < 300)
+        self.assertTrue(len(wrong) < len(self.s) * .3)
         # Check that other models get the same state sequence as self.hmm
         for mod in self.mods[1:]:
             wrong = np.where(states != mod.decode(self.y))[0]
@@ -92,7 +105,7 @@ class TestHMM(unittest.TestCase):
     def test_train(self):
         """ Test training
         """
-        log_like = self.hmm.train(self.y, n_iter=10, display=True)
+        log_like = self.hmm.train(self.y, n_iterations=10, display=True)
         # Check that log likelihood increases montonically
         for i in range(1, len(log_like)):
             self.assertTrue(log_like[i - 1] < log_like[i])
@@ -112,27 +125,6 @@ class TestHMM(unittest.TestCase):
                 self.hmm.y_mod.model_py_state.values())
             numpy.testing.assert_allclose(mod.p_state2state.values(),
                                           self.hmm.p_state2state.values())
-
-    # todo delete
-    def multi_train(self, mod):
-        """ Test training on multiple sequences.
-        """
-        ys = []
-        for i in [1, 2, 0, 4, 3]:
-            ys.append([x[200 * i:200 * (i + 1)] for x in self.y])
-        log_like = mod.multi_train(ys, n_iter=10, display=False)
-        for i in range(1, len(log_like)):
-            self.assertTrue(log_like[i - 1] < log_like[i])
-        numpy.testing.assert_allclose(mod.y_mod.model_py_state.values(),
-                                      model_py_state,
-                                      atol=0.14)
-        numpy.testing.assert_allclose(mod.p_state2state.values(),
-                                      p_state2state,
-                                      atol=0.17)
-
-    def foo_test_multi_train(self):
-        for mod in self.mods:
-            self.multi_train(mod)
 
 
 A_ = numpy.array([[0, 2, 2.0], [2, 2, 4.0], [6, 2, 2.0]])
@@ -154,36 +146,41 @@ class TestProb(unittest.TestCase):
 
     def test_normalize(self):
         for m_ in self.ms:
-            m, n = m_.shape
-            for i in range(m):
+            n_rows, n_columns = m_.shape
+            for i in range(n_rows):
                 s = 0
-                for j in range(n):
+                for j in range(n_columns):
                     s += m_.values()[i, j]
                 numpy.testing.assert_almost_equal(1, s)
 
-    def assign(self, m):
-        a = m.values().sum()
-        m.assign_col(1, [1, 1, 1])
-        numpy.testing.assert_almost_equal(m.values().sum(), a + 3)
-
     def test_assign(self):
-        for m in (self.c,):
-            self.assign(m)
 
-    def likelihoods(self, m):
-        numpy.testing.assert_allclose(m.likelihoods([0, 1, 2])[2], [1, 1, 0])
+        def assign(m):
+            a = m.values().sum()
+            m.assign_col(1, [1, 1, 1])
+            numpy.testing.assert_almost_equal(m.values().sum(), a + 3)
+
+        for m in (self.c,):
+            assign(m)
 
     def test_likelihoods(self):
-        for m in (self.c,):
-            self.likelihoods(m)
 
-    def cost(self, m):
-        numpy.testing.assert_almost_equal(m.cost(
-            self.b.T[0], self.b.T[1]), [[0, 0, 0], [0, 0, 0.375], [0.25, 0, 0]])
+        def likelihoods(m):
+            numpy.testing.assert_allclose(
+                m.likelihoods([0, 1, 2])[2], [1, 1, 0])
+
+        for m in (self.c,):
+            likelihoods(m)
 
     def test_cost(self):
+
+        def cost(m):
+            numpy.testing.assert_almost_equal(
+                m.cost(self.b.T[0],
+                       self.b.T[1]), [[0, 0, 0], [0, 0, 0.375], [0.25, 0, 0]])
+
         for m in (self.c,):
-            self.cost(m)
+            cost(m)
 
     def inplace_elementwise_multiply(self, m):
         m *= self.a
@@ -191,34 +188,43 @@ class TestProb(unittest.TestCase):
             m.values(), [[0, 0, 0.5], [0, 0, 0.5], [0.6, 0, 0]])
 
     def test_inplace_elementwise_multiply(self):
-        for m in (self.c,):
-            self.inplace_elementwise_multiply(m)
 
-    def step_forward(self, m):
-        b = self.b.T[1].copy()
-        m.step_forward(b)
-        numpy.testing.assert_almost_equal(b, [0.575, 0.775, 0.9])
+        def inplace_elementwise_multiply(m):
+            m *= self.a
+            numpy.testing.assert_almost_equal(
+                m.values(), [[0, 0, 0.5], [0, 0, 0.5], [0.6, 0, 0]])
+
+        for m in (self.c,):
+            inplace_elementwise_multiply(m)
 
     def test_step_forward(self):
-        for m in (self.a,):
-            self.step_forward(m)
 
-    def step_back(self, m):
-        b = self.b.T[1].copy()
-        m.step_back(b)
-        numpy.testing.assert_almost_equal(b, [0.625, 0.75, 0.85])
+        def step_forward(m):
+            b = self.b.T[1].copy()
+            m.step_forward(b)
+            numpy.testing.assert_almost_equal(b, [0.575, 0.775, 0.9])
+
+        for m in (self.a,):
+            step_forward(m)
 
     def test_step_back(self):
-        for m in (self.a,):
-            self.step_back(m)
 
-    def values(self, m):
-        numpy.testing.assert_almost_equal(m.values(),
-                                          [[0, 0, 1], [0, 0, 1], [1, 0, 0]])
+        def step_back(m):
+            b = self.b.T[1].copy()
+            m.step_back(b)
+            numpy.testing.assert_almost_equal(b, [0.625, 0.75, 0.85])
+
+        for m in (self.a,):
+            step_back(m)
 
     def test_values(self):
+
+        def values(m):
+            numpy.testing.assert_almost_equal(m.values(),
+                                              [[0, 0, 1], [0, 0, 1], [1, 0, 0]])
+
         for m in (self.c,):
-            self.values(m)
+            values(m)
 
 
 if __name__ == "__main__":
