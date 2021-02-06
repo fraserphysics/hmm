@@ -195,16 +195,32 @@ class HMM:
 
         for iteration in range(n_iterations):
             self.state_likelihood = self.y_mod.calculate()
-            log_likelihood_per_step = self.forward() / len(
-                self.state_likelihood)
-            if display:
-                print("it= %d LLps= %7.3f" %
-                      (iteration, log_likelihood_per_step))
-            log_likelihood_list.append(log_likelihood_per_step)
+            log_likelihood = self.forward()
             self.backward()
             self.reestimate()
 
+            log_likelihood_list.append(log_likelihood / self.n_times)
+            self.ensure_monotonic(
+                log_likelihood_list, display,
+                "{0:4d}: LLps={1:7.3f}".format(iteration,
+                                               log_likelihood_list[-1]))
+
         return log_likelihood_list
+
+    def ensure_monotonic(self: HMM, log_likelihood_list, display, message):
+        if display:
+            print(message)
+        if len(log_likelihood_list) == 1:
+            return
+
+        ll = log_likelihood_list[-1]
+        ll_prev = log_likelihood_list[-2]
+        delta = ll - ll_prev
+        if delta / abs(ll) < -1.0e-14:  # Todo: Why not zero?
+            iteration = len(log_likelihood_list)
+            raise ValueError("""
+WARNING training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4}
+""".format(iteration - 1, ll_prev, iteration, ll, delta))
 
     def reestimate(self: HMM):
         """Phase of Baum Welch training that reestimates model parameters

@@ -13,16 +13,19 @@ import hmm.base
 
 
 class Observation_0:
-    """Base class for observations.  You can't instantiate this class.
-    You must use a subclass.
+    """Base class for observations.  You can't use instances of this
+    class.  You must use a subclass.
+
     """
     _parameter_keys = tuple([])  # Specifies parameters returned by
 
     # self.__str__() and self.get_parameters().
 
-    def __init__(self: Observation_0, rng, *args):
+    def __init__(self: Observation_0, *args):
         # Must set self.: n_states
-        raise RuntimeError('Not implemented.  Use a subclass.')
+        self._rng = args[-1]
+        for key in self._parameter_keys:
+            assert key in self.__dict__
 
     def _concatenate(self: Observation_0, y_segs) -> tuple:
         """Find the lengths of the independent observation sequences
@@ -125,28 +128,26 @@ class Observation_0:
         return return_dict
 
 
-    # TODO: Rename IntegerObservation
+    # TODO: Rename to IntegerObservation
 class Observation(Observation_0):
-    """Observation model for integers with y[t] \in [0,y_max) \forall t
+    r"""Observation model for integers with y[t] \in [0,y_max) \forall t
 
     Args:
         py_state: Conditional probability of each y give each state
         rng: A numpy.random.Generator for simulation
 
     """
+
     _parameter_keys = ('_py_state',)
 
     def __init__(  # pylint: disable = super-init-not-called
             self: Observation, py_state: numpy.ndarray,
             rng: numpy.random.Generator):
         self._py_state = hmm.base.Prob(py_state)
-        self._rng = rng
+        super().__init__(rng)
+
         self._cummulative_y = numpy.cumsum(self._py_state, axis=1)
         self.n_states = len(self._py_state)
-        self._likelihood = None
-        self.n_times = None  # Flag to be set to an int by self.observe()
-        for key in self._parameter_keys:  # Todo: put this check in super()
-            assert key in self.__dict__
 
     def _concatenate(self: Observation, y_segs: tuple):
         """Concatenate observation segments each of which is a numpy array.
@@ -245,7 +246,7 @@ class HMM(hmm.base.HMM):
             self.state_likelihood[1:],  # indices t,j
             self.gamma_inv[1:]  # index t
         )
-        # Correct for terms on segment boundaries
+        # Make corrections for terms on segment boundaries
         for t in numpy.nonzero(self.gamma_inv < 0)[0]:
             assert self.gamma_inv[t] < 0
             if t == 0:
@@ -271,46 +272,73 @@ class HMM(hmm.base.HMM):
         """Train on more than one independent sequence of observations
 
         Args:
-            ys: Measured observations in format appropriate for self.y_mod
+            ys: Measured observation sequences in format appropriate
+                for self.y_mod
             n_iter: The number of iterations to execute
 
         Returns:
             List of log likelihood per observation for each iteration
 
         The differences from base.HMM: 1. More than one independent
-        observation sequence.  2. The structure of observations is not specified.
+        observation sequence.  2. The structure of observations is not
+        specified.
 
-        Todo: What is assumed about the initial state probabilities?
+        For the first training iteration, the initial distribution of
+        states at the beginning of each observation sequence is given
+        by self.p_state_initial.  However, each training iteration
+        updates the distribution of the initial state for each
+        observation sequence independently.  At the end of training,
+        the average of those independent distributions for the initial
+        states is assigned to self.p_state_initial.
+
+        I don't know of assumptions for which that procedure is
+        exactly correct.  If one knows that each observation segment
+        starts with the same state distribution, then one should use a
+        single initial state distribution in training.  If one knows
+        that the initial state distributions are different and that
+        when the model is used it will be applied to new data drawn
+        from similar sets of segments, then one should train with
+        separate initial state distributions and retain them for use
+        in the future.
+
+        The compromise treatment of the initial distribution of states
+        here is intended to treat initial distributions that are
+        different from each other but more similar to each other than
+        the time averaged state distribution.
 
         """
 
+        # log_like_list[i] = log(Prob(ys|HMM[iteration=i]))/n_times, ie,
+        # the log likelihood per time step
         log_like_list = []
-        t_seg = self.y_mod.observe(ys)
+
+        t_seg = self.y_mod.observe(ys)  # Segment boundaries
         self.n_times = self.y_mod.n_times
 
-        # The times in the ith observation sequence satisfy t_seg[i]
-        # \leq t < t_seg[i+1]
         assert self.n_times > 1
         assert t_seg[0] == 0
+
         n_seg = len(t_seg) - 1
         alpha_all = numpy.empty((self.n_times, self.n_states))
         beta_all = numpy.empty((self.n_times, self.n_states))
         gamma_inv_all = numpy.empty((self.n_times,))
-        p_state_initial_all = numpy.empty((n_seg, self.n_states))
+
         # State probabilities at the beginning of each segment
+        p_state_initial_all = numpy.empty((n_seg, self.n_states))
         for seg in range(n_seg):
             p_state_initial_all[seg, :] = self.p_state_initial.copy()
+
         for iteration in range(n_iterations):
-            if display:
-                print("i=%d: " % iteration, end="")
-            log_like_iteration = 0.0
-            # Both forward() and backward() should operate on each
-            # training segment and put the results in the
-            # corresponding segement of the the alpha, beta and gamma
-            # arrays.
+            message = "i={0:4d} ".format(iteration)
+            sum_log_like = 0.0
             likelihood_all = self.y_mod.calculate()
+
+            # Operate on each observation segment separately and put
+            # the results in the corresponding segement of the alpha,
+            # beta and gamma arrays.
+
             for seg in range(n_seg):
-                # Set up self to run forward/backward on a segment of y
+                # Set up self to run forward and backward on this segment
                 self.n_times = t_seg[seg + 1] - t_seg[seg]
                 self.alpha = alpha_all[t_seg[seg]:t_seg[seg + 1], :]
                 self.beta = beta_all[t_seg[seg]:t_seg[seg + 1], :]
@@ -320,31 +348,23 @@ class HMM(hmm.base.HMM):
                 self.p_state_initial = p_state_initial_all[seg, :]
 
                 # Run forward/backward to calculate alpha and beta
-                # values for a segment of y
-                log_like = self.forward()  # Log Likelihood
-                if display:
-                    print("L[%d]=%7.4f " % (seg, log_like / self.n_times),
-                          end="")
-                log_like_iteration += log_like
+                # values for this segment
+                log_likelihood = self.forward()
                 self.backward()
+
+                sum_log_like += log_likelihood
                 p_state_initial_all[seg, :] = self.alpha[0] * self.beta[0]
-                # Don't fit state transitions between segments
+                # Flag to prevent fitting state transitions between segments
                 self.gamma_inv[0] = -1
+                message += "L[{0}]={1:7.4f} ".format(
+                    seg, log_likelihood / self.n_times)
+            self.n_times = self.y_mod.n_times
+            log_like_list.append(sum_log_like / self.n_times)
+            message += "avg={0:10.7}f".format(log_like_list[-1])
+            self.ensure_monotonic(log_like_list, display, message)
 
-            log_like_list.append(log_like_iteration / self.n_times)
-            if iteration > 0:
-                ll = log_like_list[iteration]
-                ll_prev = log_like_list[iteration - 1]
-                delta = ll - ll_prev
-                if delta / abs(ll) < -1.0e-14:  # Todo: Why not zero?
-                    print("""
-WARNING training is not monotonic: avg[{0}]={1} and avg[{2}]={3} difference={4}
-""".format(iteration - 1, ll_prev, iteration, ll, delta))
-            if display:
-                print("avg={0:10.7}f".format(log_like_list[-1]))
-
-            # Associate all of the alpha and beta segments with self
-            # and reestimate()
+            # Associate all of the alpha, beta, and gamma_inv segments
+            # with self and reestimate()
             self.alpha = alpha_all
             self.beta = beta_all
             self.gamma_inv = gamma_inv_all
@@ -354,17 +374,26 @@ WARNING training is not monotonic: avg[{0}]={1} and avg[{2}]={3} difference={4}
         self.p_state_initial /= self.p_state_initial.sum()
         return log_like_list
 
-    def simulate(self: HMM, n: int) -> Bundle_segment:
-        # This must handle funny observation models like
-        # Observation_with_bundles
+    def simulate(self: HMM, n: int):
+        """Simulate n steps of HMM
+
+        Args:
+            n: Number of time steps to simulate
+
+        Returns:
+            (states, outs) where states is a state sequence and outs
+            is a sequence of observations
+
+        """
 
         states, raw_outs = super().simulate(n)
+        # y_mod.merge enables funny observation models like
+        # Observation_with_bundles
         return states, self.y_mod.merge(raw_outs)
 
 
 class Bundle_segment:
-    """Each instance is a pair of time series.  One of bundle ids and one
-    of observations.
+    """A pair of time series: bundle ids and observations.
 
     Args:
         bundles: Tags for each time
@@ -380,35 +409,36 @@ class Bundle_segment:
         return len(self.bundles)
 
     def __str__(self: Bundle_segment) -> str:
-        return """y values:{0}
-
-bundle values:{1}
+        return """y values:{0:s}
+bundle values:{1:s}
 """.format(self.y, self.bundles)
 
 
-class Observation_with_bundles(Observation):
+class Observation_with_bundles(Observation_0):
     """Represents likelihood of states given observations by masking an
     underlying likelihood model.
 
     Args:
         underlying_parameters: The list of parameters for the underlying class
-        underlying_class:
+        underlying_class:  A subclass of Observation_0
         bundle2state: Keys are bundle ids and values are lists of states
         rng: A numpy.random.Generator for simulation
 
     """
-    _parameter_keys = 'underlying_class y_mod bundle2state rng'.split()
+    _parameter_keys = 'underlying_class underlying_model bundle2state _rng'.split(
+    )
 
     def __init__(self: Observation_with_bundles, underlying_parameters: list,
                  underlying_class, bundle2state: dict,
                  rng: numpy.random.Generator):
         self.underlying_class = underlying_class
-        # TODO: rename self.underlying_model
         # Call self.super().__init__ to check all _parameter_keys assigned
-        self.y_mod = self.underlying_class(*underlying_parameters, rng)
+        self.underlying_model = self.underlying_class(*underlying_parameters,
+                                                      rng)
+        assert isinstance(self.underlying_model, Observation_0)
         self.bundle2state = bundle2state
-        self.rng = rng
         self.n_bundle = len(self.bundle2state)
+        super().__init__(rng)
 
         # Find out how many states there are and ensure that each
         # state is in only one bundle.
@@ -449,10 +479,8 @@ class Observation_with_bundles(Observation):
         """
         self.t_seg = super().observe(bundle_segment_list)  # Assign self._y
         self.n_times = self.t_seg[-1]
-        self.y_mod.observe([self._y.y])
+        self.underlying_model.observe([self._y.y])
         return self.t_seg
-
-    # TODO: Don't return anything
 
     def _concatenate(self: Observation_with_bundles,
                      bundle_segment_list: list) -> Bundle_segment:
@@ -484,11 +512,18 @@ class Observation_with_bundles(Observation):
     def random_out(self: Observation_with_bundles, state: int) -> tuple:
         """ Draw a single output from the conditional distribution given state.
         """
-        return self.state2bundle[state], self.y_mod.random_out(state)
+        return self.state2bundle[state], self.underlying_model.random_out(state)
 
     def merge(self: Observation_with_bundles,
               raw_outs: list) -> Observation_with_bundles:
-        """ TODO Docstring
+        """ Merge isolated pairs (bundle, y) into an Observation_with_bundles.
+
+        Args:
+            raw_outs: A list of pairs (bundle[t], y[t])
+
+        Returns:
+            A single Observation_with_bundles instance
+
         """
         bundles = []
         y = []
@@ -496,13 +531,14 @@ class Observation_with_bundles(Observation):
             bundles.append(out[0])
             y.append(out[1])
 
-        return Bundle_segment(numpy.array(bundles), self.y_mod.merge(y))
+        return Bundle_segment(numpy.array(bundles),
+                              self.underlying_model.merge(y))
 
     def calculate(self: Observation_with_bundles) -> numpy.ndarray:
         """Calculate and return likelihoods of states given self._y.
 
         Returns:
-            numpy.ndarray with shape (n_times, n_states)
+            likelihood with likelihood[t,s] = Probability(y[t]|state[t]=s)*Probability(state=s|bundle[t])
 
         Assumes self._y has been assigned by a call to self.observe().
         For each time t, the given the observation (bundle, y) return
@@ -510,10 +546,9 @@ class Observation_with_bundles(Observation):
         Probability(y|state)*Probability(state|bundle).
 
         """
-        assert self.n_times is not None  # Ensure that self.observe() was called
 
         # Get unmasked likelihoods
-        self._likelihood = self.y_mod.calculate()
+        self._likelihood = self.underlying_model.calculate()
 
         # Apply the right mask for the bundle at each time.  Note this
         # modifies self.y_mod._likelihood in place.
@@ -533,4 +568,4 @@ class Observation_with_bundles(Observation):
         self.observe().
 
         """
-        self.y_mod.reestimate(w)
+        self.underlying_model.reestimate(w)

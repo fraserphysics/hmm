@@ -69,6 +69,7 @@ class TestObservations(unittest.TestCase):
     def test_str(self):
         self.assertTrue(isinstance(self.y_mod_extensions.__str__(), str))
 
+
 # Todo: Eliminate globals?
 n_states = 6
 _py_state = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
@@ -126,9 +127,10 @@ class TestHMM(unittest.TestCase):
             self.assertTrue(
                 log_like[i - 1] < log_like[i] + 1e-14)  # Todo: fudge?
         # Check that trained model is close to true model
-        numpy.testing.assert_allclose(self.hmm.y_mod.y_mod._py_state.values(),
-                                      _py_state,
-                                      atol=0.15)
+        numpy.testing.assert_allclose(
+            self.hmm.y_mod.underlying_model._py_state.values(),
+            _py_state,
+            atol=0.15)
         numpy.testing.assert_allclose(self.hmm.p_state2state.values(),
                                       p_state2state,
                                       atol=0.15)
@@ -175,7 +177,7 @@ class TestObservation_with_bundles(unittest.TestCase):
         self.Observation_with_bundles.observe(self.data)
         w = self.Observation_with_bundles.calculate()
         self.Observation_with_bundles.reestimate(w)
-        result = self.Observation_with_bundles.y_mod._py_state
+        result = self.Observation_with_bundles.underlying_model._py_state
         self.assertTrue(result.min() == 0)
         self.assertTrue(result.max() == 1.0)
 
