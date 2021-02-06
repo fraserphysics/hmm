@@ -44,23 +44,22 @@ class Gauss(hmm.extensions.Observation):
     P(y|s) = 1/\sqrt(2\pi var[s]) exp(-(y-mu[s])^2/(2var[s])
 
     """
-    _parameter_keys = set("mu var".split())
+    _parameter_keys = "mu var".split()
 
     def __init__(
         self: Gauss,
-        pars: dict,
+        mu: float,
+        var: float,
         rng: numpy.random.Generator,
     ):
-        super().__init__(pars, rng)
-        self.sigma = numpy.sqrt(self.var)
+        assert len(var) == len(mu)
+        self.mu = mu
+        self.var = var
+        self.sigma = numpy.sqrt(var)
+        self._rng = rng
         self.dtype = [numpy.float64]
-
-    def _normalize(self: Gauss):  # Must override super._normalize
-        self.norm = 1 / numpy.sqrt(2 * numpy.pi * self.var)
-        return len(self.var)
-
-    def __str__(self: Gauss) -> str:
-        return "    mu=%s\nvar=%s " % (self.mu, self.var)
+        self.norm = 1 / numpy.sqrt(2 * numpy.pi * var)
+        self.n_states = len(var)
 
     # Ignore: Super returned int
     def random_out(  # pylint: disable = arguments-differ

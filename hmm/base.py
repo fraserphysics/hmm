@@ -184,7 +184,8 @@ class HMM:
 
         log_likelihood_list = []
         # Attach observations to self.y_mod
-        self.n_times = self.y_mod.observe(y)
+        self.y_mod.observe(y)
+        self.n_times = self.y_mod.n_times
         assert self.n_times > 1
 
         # Allocate working arrays
@@ -258,7 +259,8 @@ class HMM:
             print("""Warning: No y argument to decode().  Assuming
 self.state_likelihood was assigned externally.""")
         else:  # Calculate likelihood of data given state
-            self.n_times = self.y_mod.observe(y)
+            self.y_mod.observe(y)
+            self.n_times = self.y_mod.n_times
             self.state_likelihood = self.y_mod.calculate()
         n_times, n_states = self.state_likelihood.shape
         assert self.n_states == n_states

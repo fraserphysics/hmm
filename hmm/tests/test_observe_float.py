@@ -11,7 +11,7 @@ import numpy.testing
 import scipy.linalg
 
 import hmm.observe_float
-import hmm.base
+import hmm.extensions
 
 
 class TestGauss(unittest.TestCase):
@@ -25,18 +25,11 @@ class TestGauss(unittest.TestCase):
         mu_1 = np.array([-1.0, 1.0])
         var_1 = np.ones(2)
         self.rng = numpy.random.default_rng(0)
-        y_mod = hmm.observe_float.Gauss(
-            {
-                'mu': mu_1.copy(),
-                'var': var_1.copy(),
-            }, self.rng)
-        self.model_1_1 = hmm.base.HMM(p_s0, p_s0, p_ss, y_mod)
-        self.model_2_4 = hmm.base.HMM(
+        y_mod = hmm.observe_float.Gauss(mu_1.copy(), var_1.copy(), self.rng)
+        self.model_1_1 = hmm.extensions.HMM(p_s0, p_s0, p_ss, y_mod)
+        self.model_2_4 = hmm.extensions.HMM(
             p_s0, p_s0, p_ss,
-            hmm.observe_float.Gauss({
-                'mu': mu_1 * 2,
-                'var': var_1 * 4
-            }, self.rng))
+            hmm.observe_float.Gauss(mu_1 * 2, var_1 * 4, self.rng))
         _, y_train = self.model_1_1.simulate(100)
         self.y_train = np.array(y_train, np.float64).reshape((-1,))
 
@@ -44,7 +37,7 @@ class TestGauss(unittest.TestCase):
         self.model_1_1.decode((self.y_train,))
 
     def test_train(self):
-        self.model_2_4.y_mod.observe((self.y_train,), n_times=100)
+        self.model_2_4.y_mod.observe((self.y_train,))
         self.model_2_4.train((self.y_train,), n_iterations=15)
 
     def test_str(self):

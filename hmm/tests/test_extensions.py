@@ -34,9 +34,9 @@ class TestObservations(unittest.TestCase):
         self.w[0, :] = [1, 0, 0]
         self.w[3, :] = [0, 1, 0]
         self.ys = (y[5:], y[3:7], y[:4])
-        self.y_mod_extensions = hmm.extensions.Observation({'_py_state': p_ys},
-                                                           self.numpy_rng)
-        self.y_mod_base = hmm.base.Observation(p_ys, self.numpy_rng)
+        self.y_mod_extensions = hmm.extensions.Observation(
+            p_ys.copy(), self.numpy_rng)
+        self.y_mod_base = hmm.base.Observation(p_ys.copy(), self.numpy_rng)
         # discrete model and observations from extensions
         self.y_mod_y_extensions = (self.y_mod_extensions, (self.y64,))
         # discrete model and observations from base
@@ -69,7 +69,7 @@ class TestObservations(unittest.TestCase):
     def test_str(self):
         self.assertTrue(isinstance(self.y_mod_extensions.__str__(), str))
 
-
+# Todo: Eliminate globals?
 n_states = 6
 _py_state = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
 p_state2state = scipy.linalg.circulant([0, 0, 0, 0, 0.5, 0.5])
@@ -82,18 +82,11 @@ class TestHMM(unittest.TestCase):
     """
 
     def setUp(self):
-        y_class = hmm.extensions.Observation
-        p_ys = hmm.base.Prob(_py_state.copy())
-        y_class_parameters = {'_py_state': p_ys}
-        rng = numpy.random.default_rng(0)
-
-        self.observation_args = {
-            'y_class_parameters': y_class_parameters,
-            'y_class': y_class,
-            'bundle2state': bundle2state
-        }
-
+        self.y_class = hmm.extensions.Observation
+        self.p_ys = hmm.base.Prob(_py_state.copy())
+        self.rng = numpy.random.default_rng(0)
         self.observation_class = hmm.extensions.Observation_with_bundles
+        self.bundle2state = bundle2state
         self.hmm_class = hmm.extensions.HMM
         self.hmm = self.new_hmm()
         _, observations = self.hmm.simulate(1000)
@@ -101,7 +94,8 @@ class TestHMM(unittest.TestCase):
 
     def new_hmm(self):
         rng = numpy.random.default_rng(0)
-        observation_model = self.observation_class(self.observation_args, rng)
+        observation_model = self.observation_class([self.p_ys], self.y_class,
+                                                   self.bundle2state, rng)
         hmm = self.hmm_class(
             p_state_initial.copy(),  # Initial distribution of states
             p_state_initial.copy(),  # Stationary distribution of states
@@ -146,23 +140,16 @@ class TestObservation_with_bundles(unittest.TestCase):
 
     def setUp(self):
         self.y_class = hmm.extensions.Observation
-        p_ys = hmm.base.Prob(_py_state.copy())
-        self.y_class_parameters = {'_py_state': p_ys}
+        self.p_ys = hmm.base.Prob(_py_state.copy())
         self.bundle2state = bundle2state
         self.rng = numpy.random.default_rng(0)
 
-        self.args = {
-            'y_class_parameters': self.y_class_parameters,
-            'y_class': self.y_class,
-            'bundle2state': self.bundle2state
-        }
-
         self.Observation_with_bundles = hmm.extensions.Observation_with_bundles(
-            self.args, self.rng)
+            [self.p_ys], self.y_class, self.bundle2state, self.rng)
 
         outs = [
             self.Observation_with_bundles.random_out(s)
-            for s in range(len(p_ys))
+            for s in range(len(self.p_ys))
         ]
         bundles = [out[0] for out in outs]
         ys = [out[1] for out in outs]
@@ -171,10 +158,12 @@ class TestObservation_with_bundles(unittest.TestCase):
         ]
 
     def test_init(self):
-        hmm.extensions.Observation_with_bundles(self.args, self.rng)
+        hmm.extensions.Observation_with_bundles([self.p_ys], self.y_class,
+                                                self.bundle2state, self.rng)
 
     def test_observe(self):
-        self.assertTrue(self.Observation_with_bundles.observe(self.data) == 18)
+        t_seg = self.Observation_with_bundles.observe(self.data)
+        numpy.testing.assert_equal(t_seg, numpy.array([0, 6, 12, 18]))
 
     def test_calculate(self):
         self.Observation_with_bundles.observe(self.data)
