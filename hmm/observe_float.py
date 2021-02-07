@@ -10,8 +10,6 @@ import numpy
 
 import hmm.base
 
-import hmm.extensions
-
 COPYRIGHT = """Copyright 2021 Andrew M. Fraser
 
 This file is part of hmm.
@@ -31,7 +29,7 @@ or see <http://www.gnu.org/licenses/>.
 """
 
 
-class Gauss(hmm.extensions.Observation):
+class Gauss(hmm.base.Observation):
     r"""Scalar Gaussian observation model
 
     Args:

@@ -11,7 +11,7 @@ import numpy.testing
 import scipy.linalg
 
 import hmm.observe_float
-import hmm.extensions
+import hmm.base
 
 
 class TestGauss(unittest.TestCase):
@@ -26,8 +26,8 @@ class TestGauss(unittest.TestCase):
         var_1 = np.ones(2)
         self.rng = numpy.random.default_rng(0)
         y_mod = hmm.observe_float.Gauss(mu_1.copy(), var_1.copy(), self.rng)
-        self.model_1_1 = hmm.extensions.HMM(p_s0, p_s0, p_ss, y_mod)
-        self.model_2_4 = hmm.extensions.HMM(
+        self.model_1_1 = hmm.base.HMM(p_s0, p_s0, p_ss, y_mod)
+        self.model_2_4 = hmm.base.HMM(
             p_s0, p_s0, p_ss,
             hmm.observe_float.Gauss(mu_1 * 2, var_1 * 4, self.rng))
         _, y_train = self.model_1_1.simulate(100)
