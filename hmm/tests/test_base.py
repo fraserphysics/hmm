@@ -6,7 +6,7 @@ $ python -m pytest hmm/tests/test_base.py
 
 import unittest
 
-import numpy as np
+import numpy as np  # todo
 import numpy.testing
 import numpy.random
 
@@ -34,7 +34,8 @@ class TestObservations(unittest.TestCase):
         self.w[0, :] = [1, 0, 0]
         self.w[3, :] = [0, 1, 0]
         self.ys = (y[5:], y[3:7], y[:4])
-        self.y_mod_base = hmm.base.Observation(p_ys.copy(), self.numpy_rng)
+        self.y_mod_base = hmm.base.IntegerObservation(p_ys.copy(),
+                                                      self.numpy_rng)
         self.y_mod_simple = hmm.simple.Observation(p_ys.copy(), self.numpy_rng)
         # discrete model and observations from base
         self.y_mod_y_base = (self.y_mod_base, (self.y64,))
@@ -69,7 +70,6 @@ class TestObservations(unittest.TestCase):
         self.assertTrue(isinstance(self.y_mod_base.__str__(), str))
 
 
-# Todo: Eliminate globals?
 n_states = 6
 _py_state = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
 p_state2state = scipy.linalg.circulant([0, 0, 0, 0, 0.5, 0.5])
@@ -82,7 +82,7 @@ class TestHMM(unittest.TestCase):
     """
 
     def setUp(self):
-        self.y_class = hmm.base.Observation
+        self.y_class = hmm.base.IntegerObservation
         self.p_ys = hmm.simple.Prob(_py_state.copy())
         self.rng = numpy.random.default_rng(0)
         self.observation_class = hmm.base.Observation_with_bundles
@@ -140,7 +140,7 @@ class TestObservation_with_bundles(unittest.TestCase):
     """
 
     def setUp(self):
-        self.y_class = hmm.base.Observation
+        self.y_class = hmm.base.IntegerObservation
         self.p_ys = hmm.simple.Prob(_py_state.copy())
         self.bundle2state = bundle2state
         self.rng = numpy.random.default_rng(0)

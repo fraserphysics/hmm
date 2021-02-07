@@ -1,4 +1,4 @@
-""" base.py: Implements basic HMM algorithms.
+""" simple.py: Implements basic HMM algorithms.
 
 Classes:
 
@@ -477,32 +477,19 @@ class Observation:
 
     reestimate
 
-    _py_state  # Todo: rename to _py_state and make it private
-
     """
 
     def __init__(self: Observation,
                  py_state: numpy.ndarray,
                  rng: numpy.random.Generator = None):
-        self._py_state = py_state
+        self._py_state = Prob(py_state)
         if rng is None:
             self._rng = numpy.random.default_rng()
         else:
             self._rng = rng
-        self.n_states = self._normalize()
-        # self._likelihood[t,s] = Prob(y[t]|state[t]=s).  Assigned in
-        # self.calculate().
-        self._likelihood = None
-
-    def _normalize(self: Observation) -> int:
-        """ Separate from __init__ to make subclass easy
-
-        Returns:
-           (int): Number of states
-        """
-        self._py_state = Prob(self._py_state)
         self._cummulative_y = numpy.cumsum(self._py_state, axis=1)
-        return len(self._py_state)  # n_states
+        self.n_states = len(self._py_state)
+        self._likelihood = None
 
     def observe(self: Observation, y) -> int:
         """ Attach measurement sequence[s] to self.

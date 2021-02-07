@@ -1,6 +1,6 @@
 """test_simple.py Tests hmm.simple
 
-hmm.simple.Observation is tested with hmm.base.Observation in
+hmm.simple.Observation is tested with hmm.base.IntegerObservation in
 test_base.py
 
 $ python -m pytest hmm/tests/test_base.py
@@ -9,7 +9,7 @@ $ python -m pytest hmm/tests/test_base.py
 
 import unittest
 
-import numpy as np
+import numpy as np  # todo
 import numpy.testing
 import numpy.random
 

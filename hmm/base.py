@@ -1,4 +1,4 @@
-"""base.py: Extendable versions of simple.py that are necessary for
+"""base.py: Versions of code in simple.py that are extendable in ways necessary for
 some applications
 
 """
@@ -129,8 +129,7 @@ class Observation_0:
         return return_dict
 
 
-    # TODO: Rename to IntegerObservation
-class Observation(Observation_0):
+class IntegerObservation(Observation_0):
     r"""Observation model for integers with y[t] \in [0,y_max) \forall t
 
     Args:
@@ -142,7 +141,7 @@ class Observation(Observation_0):
     _parameter_keys = ('_py_state',)
 
     def __init__(  # pylint: disable = super-init-not-called
-            self: Observation, py_state: numpy.ndarray,
+            self: IntegerObservation, py_state: numpy.ndarray,
             rng: numpy.random.Generator):
         self._py_state = hmm.simple.Prob(py_state)
         super().__init__(rng)
@@ -150,7 +149,7 @@ class Observation(Observation_0):
         self._cummulative_y = numpy.cumsum(self._py_state, axis=1)
         self.n_states = len(self._py_state)
 
-    def _concatenate(self: Observation, y_segs: tuple):
+    def _concatenate(self: IntegerObservation, y_segs: tuple):
         """Concatenate observation segments each of which is a numpy array.
 
         """
@@ -162,7 +161,7 @@ class Observation(Observation_0):
             t_seg.append(length)
         return numpy.concatenate(y_segs), t_seg
 
-    def reestimate(self: Observation,
+    def reestimate(self: IntegerObservation,
                    w: numpy.ndarray,
                    warn: typing.Optional[bool] = True):
         """
@@ -192,7 +191,7 @@ class Observation(Observation_0):
         self._py_state.normalize()
         self._cummulative_y = numpy.cumsum(self._py_state, axis=1)
 
-    def calculate(self: Observation) -> numpy.ndarray:
+    def calculate(self: IntegerObservation) -> numpy.ndarray:
         r"""
         Calculate likelihoods: self._likelihood[t,i] = P(y(t)|state(t)=i)
 
@@ -208,7 +207,7 @@ class Observation(Observation_0):
         self._likelihood[:, :] = self._py_state[:, self._y].T  # type: ignore
         return self._likelihood
 
-    def random_out(self: Observation, state: int) -> int:
+    def random_out(self: IntegerObservation, state: int) -> int:
         """For simulation, draw a random observation given state s
 
         Args:

@@ -29,7 +29,7 @@ or see <http://www.gnu.org/licenses/>.
 """
 
 
-class Gauss(hmm.base.Observation):
+class Gauss(hmm.base.IntegerObservation):
     r"""Scalar Gaussian observation model
 
     Args:
