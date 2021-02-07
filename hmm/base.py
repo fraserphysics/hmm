@@ -89,14 +89,11 @@ class HMM:
         self.p_state2state = Prob(numpy.array(p_state2state))
         self.y_mod = y_mod
 
-    # Todo: Perhaps handle short bursts of missing data, ie, sequences
-    # are not independent.
-
     def forward(self: HMM) -> float:
         """Recursively calculate state probabilities.
 
         Returns:
-            Average log (base e) likelihood per point of entire observation sequence
+            Log (base e) of likelihood of HMM given entire observation sequence
 
         Requires that observation probabilities have already been calculated
 
@@ -127,7 +124,6 @@ class HMM:
             self.gamma_inv[t] = 1 / last.sum()
             last *= self.gamma_inv[t]
             self.alpha[t, :] = last
-            # Could use Prob.step_forwar()
             last[:] = numpy.dot(last, self.p_state2state)
         return -(numpy.log(self.gamma_inv)).sum()
 
@@ -158,9 +154,7 @@ class HMM:
         last = numpy.ones(self.n_states)
         for t in range(len(self.state_likelihood) - 1, -1, -1):
             self.beta[t, :] = last
-            last *= self.state_likelihood[t]
-            last *= self.gamma_inv[t]
-            # Could use Prob.step_back()
+            last *= self.state_likelihood[t] * self.gamma_inv[t]
             last[:] = numpy.dot(self.p_state2state, last)
 
     def train(
@@ -557,29 +551,14 @@ class Observation:
         return numpy.searchsorted(self._cummulative_y[state],
                                   self._rng.random())
 
-    def reestimate(
-        self: Observation,
-        w: numpy.ndarray,
-        warn: typing.Optional[bool] = True,
-    ):
+    def reestimate(self: Observation, w: numpy.ndarray):
         """
         Estimate new _py_state
 
         Args:
             w: w[t,s] = Prob(state[t]=s) given data and
                  old model
-            warn: If True and y[0].dtype != numpy.int32, print
-                warning
         """
-
-        # Todo: Move concerns about dtype to subclasses
-        if not (isinstance(self._y, numpy.ndarray) and
-                (self._y.dtype == numpy.int32)):
-            self._y = numpy.array(self._y, numpy.int32)
-            if warn:
-                print("Warning: reformatted y in reestimate")
-
-        assert self._y.dtype == numpy.int32 and self._y.shape == (self.n_times,)
 
         # Loop over range of allowed values of y
         for yi in range(self._py_state.shape[1]):

@@ -268,6 +268,64 @@ class HMM(hmm.base.HMM):
         self.p_state2state.normalize()
         self.y_mod.reestimate(alpha_beta)
 
+    def forward(self: HMM,
+                t_start: int = 0,
+                t_stop: int = 0,
+                t_skip: int = 0,
+                last_0=None) -> float:
+        """Recursively calculate state probabilities.
+
+        Args:
+            t_start: Use self.state_likelihood[t_start] first
+            t_stop: Use self.state_likelihood[t_start] first
+            t_skip: Number of time steps from when "last" is valid till t_start
+
+        Returns:
+            Log (base e) likelihood of HMM given entire observation sequence
+
+        """
+        if t_stop == 0:
+            # Reduces to ignoring t_start and t_stop and operating on
+            # a single segment
+            assert t_start == 0
+            t_stop = len(self.state_likelihood)
+
+        if last_0 is None:
+            last_0 = self.p_state_initial
+
+        last = numpy.copy(last_0).reshape(-1)
+        for t in range(t_skip):
+            self.p_state2state.step_forward(last)
+
+        for t in range(t_start, t_stop):
+            last *= self.state_likelihood[t]  # Element-wise multiply
+            assert last.sum() > 0
+            self.gamma_inv[t] = 1 / last.sum()
+            last *= self.gamma_inv[t]
+            self.alpha[t, :] = last
+            self.p_state2state.step_forward(last)
+        return -(numpy.log(self.gamma_inv[t_start:t_stop])).sum()
+
+    def backward(self: HMM, t_start=0, t_stop=0):
+        """
+        Baum Welch backwards pass through state conditional likelihoods.
+
+
+        Calculates values of self.beta which "reestimate()" needs.
+        """
+
+        if t_stop == 0:
+            # Reduces to ignoring t_start and t_stop and operating on
+            # a single segment
+            assert t_start == 0
+            t_stop = len(self.state_likelihood)
+
+        last = numpy.ones(self.n_states)
+        for t in range(t_stop - 1, t_start - 1, -1):
+            self.beta[t, :] = last
+            last *= self.state_likelihood[t] * self.gamma_inv[t]
+            self.p_state2state.step_back(last)
+
     def multi_train(self: HMM, ys, n_iterations: int, display=True):
         """Train on more than one independent sequence of observations
 
@@ -319,9 +377,9 @@ class HMM(hmm.base.HMM):
         assert t_seg[0] == 0
 
         n_seg = len(t_seg) - 1
-        alpha_all = numpy.empty((self.n_times, self.n_states))
-        beta_all = numpy.empty((self.n_times, self.n_states))
-        gamma_inv_all = numpy.empty((self.n_times,))
+        self.alpha = numpy.empty((self.n_times, self.n_states))
+        self.beta = numpy.empty((self.n_times, self.n_states))
+        self.gamma_inv = numpy.empty((self.n_times,))
 
         # State probabilities at the beginning of each segment
         p_state_initial_all = numpy.empty((n_seg, self.n_states))
@@ -331,7 +389,7 @@ class HMM(hmm.base.HMM):
         for iteration in range(n_iterations):
             message = "i={0:4d} ".format(iteration)
             sum_log_like = 0.0
-            likelihood_all = self.y_mod.calculate()
+            self.state_likelihood = self.y_mod.calculate()
 
             # Operate on each observation segment separately and put
             # the results in the corresponding segement of the alpha,
@@ -339,37 +397,28 @@ class HMM(hmm.base.HMM):
 
             for seg in range(n_seg):
                 # Set up self to run forward and backward on this segment
-                self.n_times = t_seg[seg + 1] - t_seg[seg]
-                self.alpha = alpha_all[t_seg[seg]:t_seg[seg + 1], :]
-                self.beta = beta_all[t_seg[seg]:t_seg[seg + 1], :]
-                self.state_likelihood = likelihood_all[t_seg[seg]:t_seg[seg +
-                                                                        1]]
-                self.gamma_inv = gamma_inv_all[t_seg[seg]:t_seg[seg + 1]]
-                self.p_state_initial = p_state_initial_all[seg, :]
+                t_start = t_seg[seg]
+                t_stop = t_seg[seg + 1]
 
-                # Run forward/backward to calculate alpha and beta
-                # values for this segment
-                log_likelihood = self.forward()
-                self.backward()
+                log_likelihood = self.forward(
+                    t_start, t_stop, last_0=p_state_initial_all[seg, :])
+                self.backward(t_start, t_stop)
 
                 sum_log_like += log_likelihood
-                p_state_initial_all[seg, :] = self.alpha[0] * self.beta[0]
+                p_state_initial_all[
+                    seg, :] = self.alpha[t_start] * self.beta[t_start]
                 # Flag to prevent fitting state transitions between segments
-                self.gamma_inv[0] = -1
+                self.gamma_inv[t_start] = -1
                 message += "L[{0}]={1:7.4f} ".format(
                     seg, log_likelihood / self.n_times)
-            self.n_times = self.y_mod.n_times
+
+            self.reestimate()
+
+            # Record/report/check this iteration
             log_like_list.append(sum_log_like / self.n_times)
             message += "avg={0:10.7}f".format(log_like_list[-1])
             self.ensure_monotonic(log_like_list, display, message)
 
-            # Associate all of the alpha, beta, and gamma_inv segments
-            # with self and reestimate()
-            self.alpha = alpha_all
-            self.beta = beta_all
-            self.gamma_inv = gamma_inv_all
-            self.state_likelihood = likelihood_all
-            self.reestimate()
         self.p_state_initial[:] = p_state_initial_all.sum(axis=0)
         self.p_state_initial /= self.p_state_initial.sum()
         return log_like_list
