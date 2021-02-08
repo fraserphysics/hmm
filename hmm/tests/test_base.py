@@ -6,7 +6,7 @@ $ python -m pytest hmm/tests/test_base.py
 
 import unittest
 
-import numpy as np  # todo
+import numpy
 import numpy.testing
 import numpy.random
 
@@ -14,6 +14,7 @@ import scipy.linalg
 
 import hmm.base
 import hmm.simple
+import hmm.tests.test_simple
 
 
 class TestObservations(unittest.TestCase):
@@ -25,12 +26,12 @@ class TestObservations(unittest.TestCase):
         p_ys = hmm.simple.Prob(numpy.array([[0, 1], [1, 1], [1, 3.0]]))
         p_ys.normalize()
         n = 20
-        y = np.empty(n, dtype=np.int32)
+        y = numpy.empty(n, dtype=numpy.int32)
         for i in range(n):
             y[i] = (i + i % 2 + i % 3 + i % 5) % 2
         self.y = y
-        self.y64 = np.array(y, dtype=np.int64)
-        self.w = np.array(20 * [0, 0, 1.0]).reshape((n, 3))
+        self.y64 = numpy.array(y, dtype=numpy.int64)
+        self.w = numpy.array(20 * [0, 0, 1.0]).reshape((n, 3))
         self.w[0, :] = [1, 0, 0]
         self.w[3, :] = [0, 1, 0]
         self.ys = (y[5:], y[3:7], y[:4])
@@ -70,26 +71,31 @@ class TestObservations(unittest.TestCase):
         self.assertTrue(isinstance(self.y_mod_base.__str__(), str))
 
 
-n_states = 6
-_py_state = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
-p_state2state = scipy.linalg.circulant([0, 0, 0, 0, 0.5, 0.5])
-bundle2state = {0: [0, 1, 2], 1: [3], 2: [4, 5]}
-p_state_initial = numpy.ones(n_states) / n_states
+class BaseClass(hmm.tests.test_simple.BaseClass):
+    bundle2state = {0: [0, 1, 2], 1: [3], 2: [4, 5]}
 
 
-class TestHMM(unittest.TestCase):
+class TestHMM(BaseClass):
     """ Test hmm.base.HMM
     """
 
     def setUp(self):
         self.y_class = hmm.base.IntegerObservation
-        self.p_ys = hmm.simple.Prob(_py_state.copy())
+        self.p_ys = hmm.simple.Prob(self._py_state.copy())
         self.rng = numpy.random.default_rng(0)
-        self.observation_class = hmm.base.Observation_with_bundles
-        self.bundle2state = bundle2state
-        self.hmm_class = hmm.base.HMM
-        self.hmm = self.new_hmm()
-        _, observations = self.hmm.simulate(1000)
+
+        observation_model = hmm.base.Observation_with_bundles([self.p_ys],
+                                                              self.y_class,
+                                                              self.bundle2state,
+                                                              self.rng)
+        self.base_hmm = hmm.base.HMM(
+            self.p_state_initial.copy(),  # Initial distribution of states
+            self.p_state_initial.copy(),  # Stationary distribution of states
+            self.p_state2state.copy(),  # State transition probabilities
+            observation_model,
+            rng=self.rng,
+        )
+        _, observations = self.base_hmm.simulate(1000)
         self.y = [observations] * 5
 
     def new_hmm(self):
@@ -97,52 +103,53 @@ class TestHMM(unittest.TestCase):
         observation_model = self.observation_class([self.p_ys], self.y_class,
                                                    self.bundle2state, rng)
         hmm = self.hmm_class(
-            p_state_initial.copy(),  # Initial distribution of states
-            p_state_initial.copy(),  # Stationary distribution of states
-            p_state2state.copy(),  # State transition probabilities
+            self.p_state_initial.copy(),  # Initial distribution of states
+            self.p_state_initial.copy(),  # Stationary distribution of states
+            self.p_state2state.copy(),  # State transition probabilities
             observation_model,
             rng=rng,
         )
         return hmm
 
     def test_state_simulate(self):
-        result = self.hmm.state_simulate(10)
+        result = self.base_hmm.state_simulate(10)
 
     def test_simulate(self):
         n = 10
-        result = self.hmm.simulate(n)
+        result = self.base_hmm.simulate(n)
         self.assertTrue(len(result[0]) == n)
         self.assertTrue(len(result[1].bundles) == n)
 
     def test_str(self):
-        self.assertTrue(isinstance(self.hmm.__str__(), str))
+        self.assertTrue(isinstance(self.base_hmm.__str__(), str))
 
     def test_multi_train(self):
         """ Test training
         """
-        log_like = self.hmm.multi_train(self.y, n_iterations=10, display=False)
+        log_like = self.base_hmm.multi_train(self.y,
+                                             n_iterations=10,
+                                             display=False)
         # Check that log likelihood increases montonically
         for i in range(1, len(log_like)):
             self.assertTrue(
                 log_like[i - 1] < log_like[i] + 1e-14)  # Todo: fudge?
         # Check that trained model is close to true model
         numpy.testing.assert_allclose(
-            self.hmm.y_mod.underlying_model._py_state.values(),
-            _py_state,
+            self.base_hmm.y_mod.underlying_model._py_state.values(),
+            self._py_state,
             atol=0.15)
-        numpy.testing.assert_allclose(self.hmm.p_state2state.values(),
-                                      p_state2state,
+        numpy.testing.assert_allclose(self.base_hmm.p_state2state.values(),
+                                      self.p_state2state,
                                       atol=0.15)
 
 
-class TestObservation_with_bundles(unittest.TestCase):
+class TestObservation_with_bundles(BaseClass):
     """ Test hmm.base.Observation_with_bundles
     """
 
     def setUp(self):
         self.y_class = hmm.base.IntegerObservation
-        self.p_ys = hmm.simple.Prob(_py_state.copy())
-        self.bundle2state = bundle2state
+        self.p_ys = hmm.simple.Prob(self._py_state.copy())
         self.rng = numpy.random.default_rng(0)
 
         self.Observation_with_bundles = hmm.base.Observation_with_bundles(
@@ -177,10 +184,6 @@ class TestObservation_with_bundles(unittest.TestCase):
         result = self.Observation_with_bundles.underlying_model._py_state
         self.assertTrue(result.min() == 0)
         self.assertTrue(result.max() == 1.0)
-
-
-if __name__ == "__main__":
-    numpy.testing.run_module_suite()
 
 # --------------------------------
 # Local Variables:

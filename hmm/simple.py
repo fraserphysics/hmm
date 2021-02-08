@@ -581,7 +581,7 @@ class Prob(numpy.ndarray):
     # See http://docs.scipy.org/doc/numpy/user/basics.subclassing.html
     def normalize(self: Prob) -> Prob:  # Prob instance
         """
-        Make each row sum to one
+        Modify self to make each row sum to one
 
         Returns:
             Self after normalization
