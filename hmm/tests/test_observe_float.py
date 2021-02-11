@@ -26,7 +26,8 @@ class TestGauss(unittest.TestCase):
         var_1 = numpy.ones(2)
         self.rng = numpy.random.default_rng(0)
         y_mod = hmm.observe_float.Gauss(mu_1.copy(), var_1.copy(), self.rng)
-        self.model_1_1 = hmm.base.HMM(p_initial_state, p_initial_state, p_state2state, y_mod, self.rng)
+        self.model_1_1 = hmm.base.HMM(p_initial_state, p_initial_state,
+                                      p_state2state, y_mod, self.rng)
         self.model_2_4 = hmm.base.HMM(
             p_initial_state, p_initial_state, p_state2state,
             hmm.observe_float.Gauss(mu_1 * 2, var_1 * 4, self.rng))
@@ -34,7 +35,7 @@ class TestGauss(unittest.TestCase):
         # Exercises random_out
         _, y_train = self.model_1_1.simulate(100)
 
-         self.y_train = numpy.array(y_train, numpy.float64).reshape((-1,))
+        self.y_train = numpy.array(y_train, numpy.float64).reshape((-1,))
 
     def test_decode(self):
         rv = numpy.array(self.model_1_1.decode((self.y_train,)))
@@ -55,6 +56,7 @@ class TestGauss(unittest.TestCase):
         tail = string[n_instance:]
         self.assertTrue(
             tail == 'instance:\n    mu\n[-1.  1.]\n    var\n[1. 1.]\n')
+
 
 # --------------------------------
 # Local Variables:

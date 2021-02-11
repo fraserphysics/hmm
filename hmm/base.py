@@ -23,8 +23,8 @@ class Observation_0:
     # self.__str__() and self.get_parameters().
 
     def __init__(self: Observation_0, *args):
-        # Must set self.: n_states
         self._rng = args[-1]
+        self.n_states = 0  # Subclasses must set n_states
         for key in self._parameter_keys:
             assert key in self.__dict__
 
@@ -97,6 +97,7 @@ class Observation_0:
             (numpy.ndarray): Segment boundaries
 
         """
+        # pylint: disable = attribute-defined-outside-init
         self._y, t_seg = self._concatenate(y_segs)
         self.t_seg = numpy.array(t_seg)
         self.n_times = t_seg[-1]
@@ -161,9 +162,10 @@ class IntegerObservation(Observation_0):
             t_seg.append(length)
         return numpy.concatenate(y_segs), t_seg
 
-    def reestimate(self: IntegerObservation,
-                   w: numpy.ndarray,
-                   warn: typing.Optional[bool] = True):
+    def reestimate(
+            self: IntegerObservation,  # pylint: disable = arguments-differ
+            w: numpy.ndarray,
+            warn: typing.Optional[bool] = True):
         """
         Estimate new model parameters
 
@@ -175,6 +177,7 @@ class IntegerObservation(Observation_0):
         """
         if not (isinstance(self._y, numpy.ndarray) and
                 (self._y.dtype == numpy.int32)):
+            # pylint: disable = attribute-defined-outside-init
             self._y = numpy.array(self._y, numpy.int32)
             if warn:
                 print("Warning: reformatted y in reestimate")
@@ -268,11 +271,12 @@ class HMM(hmm.simple.HMM):
         self.p_state2state.normalize()
         self.y_mod.reestimate(alpha_beta)
 
-    def forward(self: HMM,
-                t_start: int = 0,
-                t_stop: int = 0,
-                t_skip: int = 0,
-                last_0=None) -> float:
+    def forward(
+            self: HMM,  # pylint: disable = arguments-differ
+            t_start: int = 0,
+            t_stop: int = 0,
+            t_skip: int = 0,
+            last_0=None) -> float:
         """Recursively calculate state probabilities.
 
         Args:
@@ -306,7 +310,9 @@ class HMM(hmm.simple.HMM):
             self.p_state2state.step_forward(last)
         return -(numpy.log(self.gamma_inv[t_start:t_stop])).sum()
 
-    def backward(self: HMM, t_start=0, t_stop=0):
+    def backward(self: HMM,
+                 t_start=0,
+                 t_stop=0):  # pylint: disable = arguments-differ
         """
         Baum Welch backwards pass through state conditional likelihoods.
 
@@ -366,6 +372,8 @@ class HMM(hmm.simple.HMM):
 
         """
 
+        # pylint: disable = attribute-defined-outside-init
+
         # log_like_list[i] = log(Prob(ys|HMM[iteration=i]))/n_times, ie,
         # the log likelihood per time step
         log_like_list = []
@@ -423,11 +431,11 @@ class HMM(hmm.simple.HMM):
         self.p_state_initial /= self.p_state_initial.sum()
         return log_like_list
 
-    def simulate(self: HMM, n: int):
+    def simulate(self: HMM, length: int):
         """Simulate n steps of HMM
 
         Args:
-            n: Number of time steps to simulate
+            length: Number of time steps to simulate
 
         Returns:
             (states, outs) where states is a state sequence and outs
@@ -435,7 +443,7 @@ class HMM(hmm.simple.HMM):
 
         """
 
-        states, raw_outs = super().simulate(n)
+        states, raw_outs = super().simulate(length)
         # y_mod.merge enables funny observation models like
         # Observation_with_bundles
         return states, self.y_mod.merge(raw_outs)
@@ -515,8 +523,9 @@ class Observation_with_bundles(Observation_0):
                 assert self.state2bundle[state_id] == -1
                 self.state2bundle[state_id] = bundle_id
 
-    def observe(self: Observation_with_bundles,
-                bundle_segment_list: list) -> int:
+    def observe(
+            self: Observation_with_bundles,  # pylint: disable = arguments-differ
+            bundle_segment_list: list) -> int:
         """Attach observations to self as a single Bundle_segment
 
         Args:
@@ -526,13 +535,16 @@ class Observation_with_bundles(Observation_0):
         to attach observations stripped of bundle tags to self.y_mod.
 
         """
+        # pylint: disable = attribute-defined-outside-init
         self.t_seg = super().observe(bundle_segment_list)  # Assign self._y
         self.n_times = self.t_seg[-1]
         self.underlying_model.observe([self._y.y])
         return self.t_seg
 
-    def _concatenate(self: Observation_with_bundles,
-                     bundle_segment_list: list) -> Bundle_segment:
+    def _concatenate(
+        self: Observation_with_bundles,  # pylint: disable = arguments-differ
+        bundle_segment_list: list
+    ) -> Bundle_segment:
         """ Create a single Bundle_segment from a list of segments
 
         Args:
@@ -587,7 +599,8 @@ class Observation_with_bundles(Observation_0):
         """Calculate and return likelihoods of states given self._y.
 
         Returns:
-            likelihood with likelihood[t,s] = Probability(y[t]|state[t]=s)*Probability(state=s|bundle[t])
+            likelihood with likelihood[t,s] = Probability(y[t]|state[t]=s) *
+                Probability(state=s|bundle[t])
 
         Assumes self._y has been assigned by a call to self.observe().
         For each time t, the given the observation (bundle, y) return
@@ -596,6 +609,7 @@ class Observation_with_bundles(Observation_0):
 
         """
 
+        # pylint: disable = attribute-defined-outside-init
         # Get unmasked likelihoods
         self._likelihood = self.underlying_model.calculate()
 
@@ -611,7 +625,8 @@ class Observation_with_bundles(Observation_0):
         """Reestimate parameters of self.y_mod
 
         Args:
-            w: Weights with w[t,s] = alpha[t,s]*beta[t,s] = Probability(state=s|all data)
+            w: Weights with w[t,s] = alpha[t,s]*beta[t,s] =
+                Probability(state=s|all data)
 
         Assumes that observations are already attached to self.y_mod by
         self.observe().

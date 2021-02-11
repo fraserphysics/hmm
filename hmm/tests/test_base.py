@@ -98,21 +98,8 @@ class TestHMM(BaseClass):
         _, observations = self.base_hmm.simulate(1000)
         self.y = [observations] * 5
 
-    def new_hmm(self):
-        rng = numpy.random.default_rng(0)
-        observation_model = self.observation_class([self.p_ys], self.y_class,
-                                                   self.bundle2state, rng)
-        hmm = self.hmm_class(
-            self.p_state_initial.copy(),  # Initial distribution of states
-            self.p_state_initial.copy(),  # Stationary distribution of states
-            self.p_state2state.copy(),  # State transition probabilities
-            observation_model,
-            rng=rng,
-        )
-        return hmm
-
     def test_state_simulate(self):
-        result = self.base_hmm.state_simulate(10)
+        self.base_hmm.state_simulate(10)
 
     def test_simulate(self):
         n = 10
@@ -184,6 +171,7 @@ class TestObservation_with_bundles(BaseClass):
         result = self.Observation_with_bundles.underlying_model._py_state
         self.assertTrue(result.min() == 0)
         self.assertTrue(result.max() == 1.0)
+
 
 # --------------------------------
 # Local Variables:

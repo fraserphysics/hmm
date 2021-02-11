@@ -51,6 +51,7 @@ class BaseClass(unittest.TestCase):
             cls.mask[t, t % cls.n_states] = False
 
     def initialize(self):
+        # pylint: disable = attribute-defined-outside-init
         self.rng = numpy.random.default_rng(0)
         self.simple_observation = hmm.simple.Observation(
             self._py_state.copy(), self.rng)

@@ -44,7 +44,7 @@ class Gauss(hmm.base.IntegerObservation):
     """
     _parameter_keys = "mu var".split()
 
-    def __init__(
+    def __init__(  # pylint: disable = super-init-not-called
         self: Gauss,
         mu: float,
         var: float,
