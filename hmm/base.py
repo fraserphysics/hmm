@@ -475,22 +475,18 @@ class Observation_with_bundles(Observation_0):
     underlying likelihood model.
 
     Args:
-        underlying_parameters: The list of parameters for the underlying class
-        underlying_class:  A subclass of Observation_0
+        underlying_instance: An instance of the underlying model class
         bundle2state: Keys are bundle ids and values are lists of states
         rng: A numpy.random.Generator for simulation
 
     """
-    _parameter_keys = 'underlying_class underlying_model bundle2state _rng'.split(
-    )
+    _parameter_keys = 'underlying_model bundle2state _rng'.split()
 
-    def __init__(self: Observation_with_bundles, underlying_parameters: list,
-                 underlying_class, bundle2state: dict,
+    def __init__(self: Observation_with_bundles,
+                 underlying_instance: Observation_0, bundle2state: dict,
                  rng: numpy.random.Generator):
-        self.underlying_class = underlying_class
+        self.underlying_model = underlying_instance
         # Call self.super().__init__ to check all _parameter_keys assigned
-        self.underlying_model = self.underlying_class(*underlying_parameters,
-                                                      rng)
         assert isinstance(self.underlying_model, Observation_0)
         self.bundle2state = bundle2state
         self.n_bundle = len(self.bundle2state)

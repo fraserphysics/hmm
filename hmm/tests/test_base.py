@@ -84,10 +84,8 @@ class TestHMM(BaseClass):
         self.p_ys = hmm.simple.Prob(self._py_state.copy())
         self.rng = numpy.random.default_rng(0)
 
-        observation_model = hmm.base.Observation_with_bundles([self.p_ys],
-                                                              self.y_class,
-                                                              self.bundle2state,
-                                                              self.rng)
+        observation_model = hmm.base.Observation_with_bundles(
+            self.y_class(self.p_ys, self.rng), self.bundle2state, self.rng)
         self.base_hmm = hmm.base.HMM(
             self.p_state_initial.copy(),  # Initial distribution of states
             self.p_state_initial.copy(),  # Stationary distribution of states
@@ -140,7 +138,7 @@ class TestObservation_with_bundles(BaseClass):
         self.rng = numpy.random.default_rng(0)
 
         self.Observation_with_bundles = hmm.base.Observation_with_bundles(
-            [self.p_ys], self.y_class, self.bundle2state, self.rng)
+            self.y_class(self.p_ys, self.rng), self.bundle2state, self.rng)
 
         outs = [
             self.Observation_with_bundles.random_out(s)
@@ -149,10 +147,6 @@ class TestObservation_with_bundles(BaseClass):
         bundles = [out[0] for out in outs]
         ys = [out[1] for out in outs]
         self.data = [hmm.base.Bundle_segment(bundles, ys) for x in range(3)]
-
-    def test_init(self):
-        hmm.base.Observation_with_bundles([self.p_ys], self.y_class,
-                                          self.bundle2state, self.rng)
 
     def test_observe(self):
         t_seg = self.Observation_with_bundles.observe(self.data)
