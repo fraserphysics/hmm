@@ -28,8 +28,8 @@ class Observation_0:
         for key in self._parameter_keys:
             assert key in self.__dict__
 
-    def _concatenate(self: Observation_0, y_segs) -> tuple:
-        """Find the lengths of the independent observation sequences
+    def _concatenate(self: Observation_0, y_segs: (tuple, list)) -> tuple:
+        """Concatenate observation segments.  Assumes each is a numpy array.
 
         Args:
             y_segs:  The observations.  The structure depends on the subclass
@@ -39,7 +39,19 @@ class Observation_0:
             boundaries.
 
         """
-        raise RuntimeError('Not implemented.  Use a subclass.')
+        assert isinstance(y_segs, (tuple, list))
+        length = 0
+        t_seg = [0]
+        for seg in y_segs:
+            length += len(seg)
+            t_seg.append(length)
+        try:
+            all_data = numpy.concatenate(y_segs)
+        except:
+            print('Observation_0._concatenate() cannot handle type {0}'.format(
+                type(y_segs[0])))
+            raise
+        return all_data, t_seg
 
     def reestimate(self: Observation_0, w: numpy.ndarray):
         """Based on w, modify parameters of self
@@ -150,20 +162,8 @@ class IntegerObservation(Observation_0):
         self._cummulative_y = numpy.cumsum(self._py_state, axis=1)
         self.n_states = len(self._py_state)
 
-    def _concatenate(self: IntegerObservation, y_segs: tuple):
-        """Concatenate observation segments each of which is a numpy array.
-
-        """
-        assert isinstance(y_segs, (tuple, list))
-        length = 0
-        t_seg = [0]
-        for seg in y_segs:
-            length += len(seg)
-            t_seg.append(length)
-        return numpy.concatenate(y_segs), t_seg
-
-    def reestimate(
-            self: IntegerObservation,  # pylint: disable = arguments-differ
+    def reestimate(  # pylint: disable = arguments-differ
+            self: IntegerObservation,
             w: numpy.ndarray,
             warn: typing.Optional[bool] = True):
         """
@@ -271,8 +271,8 @@ class HMM(hmm.simple.HMM):
         self.p_state2state.normalize()
         self.y_mod.reestimate(alpha_beta)
 
-    def forward(
-            self: HMM,  # pylint: disable = arguments-differ
+    def forward(  # pylint: disable = arguments-differ
+            self: HMM,
             t_start: int = 0,
             t_stop: int = 0,
             t_skip: int = 0,
@@ -310,9 +310,8 @@ class HMM(hmm.simple.HMM):
             self.p_state2state.step_forward(last)
         return -(numpy.log(self.gamma_inv[t_start:t_stop])).sum()
 
-    def backward(self: HMM,
-                 t_start=0,
-                 t_stop=0):  # pylint: disable = arguments-differ
+    def backward(  # pylint: disable = arguments-differ
+            self: HMM, t_start=0, t_stop=0):
         """
         Baum Welch backwards pass through state conditional likelihoods.
 
@@ -523,9 +522,8 @@ class Observation_with_bundles(Observation_0):
                 assert self.state2bundle[state_id] == -1
                 self.state2bundle[state_id] = bundle_id
 
-    def observe(
-            self: Observation_with_bundles,  # pylint: disable = arguments-differ
-            bundle_segment_list: list) -> int:
+    def observe(  # pylint: disable = arguments-differ
+            self: Observation_with_bundles, bundle_segment_list: list) -> int:
         """Attach observations to self as a single Bundle_segment
 
         Args:
@@ -541,10 +539,9 @@ class Observation_with_bundles(Observation_0):
         self.underlying_model.observe([self._y.y])
         return self.t_seg
 
-    def _concatenate(
-        self: Observation_with_bundles,  # pylint: disable = arguments-differ
-        bundle_segment_list: list
-    ) -> Bundle_segment:
+    def _concatenate(  # pylint: disable = arguments-differ
+            self: Observation_with_bundles,
+            bundle_segment_list: list) -> Bundle_segment:
         """ Create a single Bundle_segment from a list of segments
 
         Args:

@@ -448,7 +448,7 @@ p_state2state =
         # numpy.set_printoptions(save)
         return rv
 
-    def deallocate(self: HMM):
+    def deallocate(self: HMM) -> HMM:
         """ Remove arrays assigned by train.
 
         To be called before writing a model to disk
@@ -456,6 +456,7 @@ p_state2state =
         del (self.alpha)
         del (self.beta)
         del (self.gamma_inv)
+        return self
 
 
 class Observation:
