@@ -530,7 +530,7 @@ class Observation_with_bundles(Observation_0):
 
         """
         # pylint: disable = attribute-defined-outside-init
-        self.t_seg = super().observe(bundle_segment_list)  # Assign self._y
+        self._y, self.t_seg = self._concatenate(bundle_segment_list)
         self.n_times = self.t_seg[-1]
         self.underlying_model.observe([self._y.y])
         return self.t_seg
@@ -556,12 +556,10 @@ class Observation_with_bundles(Observation_0):
             bundles.append(segment.bundles)
             ys.append(segment.y)
 
-        def concatenate(list_of_lists):
-            """Concatenate a list of lists
-            """
-            return [item for sublist in list_of_lists for item in sublist]
-
-        return Bundle_segment(concatenate(bundles), concatenate(ys)), t_seg
+        all_bundles = [item for sublist in bundles for item in sublist]
+        all_ys, y_t_seg = self.underlying_model._concatenate(ys)
+        assert tuple(t_seg) == tuple(y_t_seg)
+        return Bundle_segment(all_bundles, all_ys), t_seg
 
     def random_out(self: Observation_with_bundles, state: int) -> tuple:
         """ Draw a single output from the conditional distribution given state.

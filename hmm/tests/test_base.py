@@ -140,10 +140,12 @@ class TestObservation_with_bundles(BaseClass):
         self.Observation_with_bundles = hmm.base.Observation_with_bundles(
             self.y_class(self.p_ys, self.rng), self.bundle2state, self.rng)
 
+        # outs[t] = (bundle[t], y[t])
         outs = [
             self.Observation_with_bundles.random_out(s)
             for s in range(len(self.p_ys))
         ]
+
         bundles = [out[0] for out in outs]
         ys = [out[1] for out in outs]
         self.data = [hmm.base.Bundle_segment(bundles, ys) for x in range(3)]
