@@ -85,16 +85,6 @@ class TestHMM(BaseClass):
             self.assertTrue(array.min() == 0)
             self.assertTrue(array.max() == self.n_states - 1)
 
-    def test_initialize_y_model(self):
-        """ Also exercises self.mod.state_simulate.
-        """
-        # Need .copy() because initialize_y_model modifies _py_state
-        difference = self.simple_hmm.y_mod._py_state.copy(
-        ) - self.simple_hmm.initialize_y_model(self.y)._py_state
-        self.assertTrue(difference.max() > 0.01)
-        zero = difference.sum(axis=1)
-        self.assertTrue(zero.max() < 1e-9)  # Rows of each should sum to one
-
     def test_link(self):
         """ Remove link from 0 to itself
         """

@@ -157,6 +157,14 @@ class HMM:
             last *= self.state_likelihood[t] * self.gamma_inv[t]
             last[:] = numpy.dot(self.p_state2state, last)
 
+    def calculate(self: HMM):
+        """A hack to prepare for forward outside of train
+        """
+        self.state_likelihood = self.y_mod.calculate()
+        self.n_times = self.y_mod.n_times
+        self.alpha = numpy.empty((self.n_times, self.n_states))
+        self.gamma_inv = numpy.empty((self.n_times,))
+
     def train(
             self: HMM,
             y,  #  Type must work for self.y_mod.observe(y)
@@ -265,10 +273,7 @@ WARNING training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4
         This implements the Viterbi algorithm.
         """
 
-        if y is None:
-            print("""Warning: No y argument to decode().  Assuming
-self.state_likelihood was assigned externally.""")
-        else:  # Calculate likelihood of data given state
+        if y is not None:  # Calculate likelihood of data given state
             self.y_mod.observe(y)
             self.n_times = self.y_mod.n_times
             self.state_likelihood = self.y_mod.calculate()
@@ -305,34 +310,6 @@ self.state_likelihood was assigned externally.""")
             best_state_sequence[t] = previous_best_state
             previous_best_state = best_predecessors[t, previous_best_state]
         return best_state_sequence.flat
-
-    def initialize_y_model(
-        self: HMM,
-        y,  #  Type must work for self.y_mod.observe(y)
-        state_sequence: typing.Optional[numpy.ndarray] = None):
-        """ Given data, make plausible y_model.
-
-        Args:
-            y: Observation sequence
-            state_sequence: State sequence
-
-        """
-        n_times = self.y_mod.observe(y)
-        if state_sequence is None:
-            state_sequence = numpy.array(self.state_simulate(n_times),
-                                         numpy.int32)
-
-        # Set alpha and beta so that in reestimate they enforce the
-        # simulated state sequence
-        self.alpha = numpy.zeros((n_times, self.n_states))
-        t = numpy.arange(n_times)
-        self.alpha[t, state_sequence] = 1
-        self.beta = self.alpha
-
-        self.gamma_inv = numpy.ones(n_times)
-        self.state_likelihood = numpy.ones((n_times, self.n_states))
-        self.reestimate()
-        return self.y_mod
 
     def state_simulate(
         self: HMM,

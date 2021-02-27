@@ -1,6 +1,6 @@
 """test_base.py Tests hmm.base
 
-$ python -m pytest hmm/tests/test_base.py
+$ python -m pytest hmm/tests/test_base.py or $ py.test --pdb hmm/tests/test_base.py
 
 """
 
@@ -84,17 +84,40 @@ class TestHMM(BaseClass):
         self.p_ys = hmm.simple.Prob(self._py_state.copy())
         self.rng = numpy.random.default_rng(0)
 
-        observation_model = hmm.base.Observation_with_bundles(
-            self.y_class(self.p_ys, self.rng), self.bundle2state, self.rng)
+        # Setup for test_initialize_y_model with simple_observation
+        simple_observation = hmm.base.IntegerObservation(self.p_ys, self.rng)
+        self.simple_hmm = hmm.base.HMM(
+            self.p_state_initial.copy(),  # Initial distribution of states
+            self.p_state_initial.copy(),  # Stationary distribution of states
+            self.p_state2state.copy(),  # State transition probabilities
+            simple_observation,
+            rng=self.rng,
+        )
+        _, observations = self.simple_hmm.simulate(1000)
+        self.simple_y = [observations] * 5
+
+        # Setup for other tests with bundle_observation
+        bundle_observation = hmm.base.Observation_with_bundles(
+            simple_observation, self.bundle2state, self.rng)
         self.base_hmm = hmm.base.HMM(
             self.p_state_initial.copy(),  # Initial distribution of states
             self.p_state_initial.copy(),  # Stationary distribution of states
             self.p_state2state.copy(),  # State transition probabilities
-            observation_model,
+            bundle_observation,
             rng=self.rng,
         )
         _, observations = self.base_hmm.simulate(1000)
         self.y = [observations] * 5
+
+    def test_initialize_y_model(self):
+        """ Also exercises self.mod.state_simulate.
+        """
+        # Need .copy() because initialize_y_model modifies _py_state
+        difference = self.simple_hmm.y_mod._py_state.copy(
+        ) - self.simple_hmm.initialize_y_model(self.simple_y)._py_state
+        self.assertTrue(difference.max() > 0.01)
+        zero = difference.sum(axis=1)
+        self.assertTrue(zero.max() < 1e-9)  # Rows of each should sum to one
 
     def test_state_simulate(self):
         self.base_hmm.state_simulate(10)

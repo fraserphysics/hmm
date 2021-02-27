@@ -18,9 +18,10 @@ class Observation_0:
     class.  You must use a subclass.
 
     """
-    _parameter_keys = tuple([])  # Specifies parameters returned by
+    _parameter_keys = tuple([])  # Specifies parameters reported by
 
-    # self.__str__() and self.get_parameters().
+    # self.__str__.  These parameter
+    # names should be in self.__dict__.
 
     def __init__(self: Observation_0, *args):
         self._rng = args[-1]
@@ -129,18 +130,6 @@ class Observation_0:
             return_string += '{0}\n'.format(getattr(self, key))
         return return_string
 
-    def get_parameters(self: Observation_0) -> dict:
-        """Return a dict representation of self.
-
-        Returns:
-            A dict with a key for each item in self._parameter_keys
-
-        """
-        return_dict = {}
-        for key in self._parameter_keys:
-            return_dict[key] = getattr(self, key)
-        return return_dict
-
 
 class IntegerObservation(Observation_0):
     r"""Observation model for integers with y[t] \in [0,y_max) \forall t
@@ -153,9 +142,8 @@ class IntegerObservation(Observation_0):
 
     _parameter_keys = ('_py_state',)
 
-    def __init__(  # pylint: disable = super-init-not-called
-            self: IntegerObservation, py_state: numpy.ndarray,
-            rng: numpy.random.Generator):
+    def __init__(self: IntegerObservation, py_state: numpy.ndarray,
+                 rng: numpy.random.Generator):
         self._py_state = hmm.simple.Prob(py_state)
         super().__init__(rng)
 
@@ -430,6 +418,35 @@ class HMM(hmm.simple.HMM):
         self.p_state_initial /= self.p_state_initial.sum()
         return log_like_list
 
+    def initialize_y_model(
+        self: HMM,
+        y,  #  Type must work for self.y_mod.observe(y)
+        state_sequence: typing.Optional[numpy.ndarray] = None):
+        """ Given data, make plausible y_model.
+
+        Args:
+            y: Observation sequence
+            state_sequence: State sequence
+
+        """
+        # ToDo: Fails for general y_mod
+        n_times = self.y_mod.observe(y)[-1]
+        if state_sequence is None:
+            state_sequence = numpy.array(self.state_simulate(n_times),
+                                         numpy.int32)
+
+        # Set alpha and beta so that in reestimate they enforce the
+        # simulated state sequence
+        self.alpha = numpy.zeros((n_times, self.n_states))
+        t = numpy.arange(n_times)
+        self.alpha[t, state_sequence] = 1
+        self.beta = self.alpha
+
+        self.gamma_inv = numpy.ones(n_times)
+        self.state_likelihood = numpy.ones((n_times, self.n_states))
+        self.reestimate()
+        return self.y_mod
+
     def simulate(self: HMM, length: int):
         """Simulate n steps of HMM
 
@@ -480,16 +497,16 @@ class Observation_with_bundles(Observation_0):
         rng: A numpy.random.Generator for simulation
 
     """
-    _parameter_keys = 'underlying_model bundle2state _rng'.split()
+    _parameter_keys = 'underlying_model bundle2state'.split()
 
     def __init__(self: Observation_with_bundles,
                  underlying_instance: Observation_0, bundle2state: dict,
                  rng: numpy.random.Generator):
         self.underlying_model = underlying_instance
-        # Call self.super().__init__ to check all _parameter_keys assigned
         assert isinstance(self.underlying_model, Observation_0)
         self.bundle2state = bundle2state
         self.n_bundle = len(self.bundle2state)
+        # Call super().__init__ to check all _parameter_keys assigned
         super().__init__(rng)
 
         # Find out how many states there are and ensure that each
