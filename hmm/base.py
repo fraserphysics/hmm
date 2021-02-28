@@ -411,7 +411,7 @@ class HMM(hmm.simple.HMM):
 
             # Record/report/check this iteration
             log_like_list.append(sum_log_like / self.n_times)
-            message += "avg={0:10.7}f".format(log_like_list[-1])
+            message += "avg={0:10.7f}".format(log_like_list[-1])
             self.ensure_monotonic(log_like_list, display, message)
 
         self.p_state_initial[:] = p_state_initial_all.sum(axis=0)
@@ -419,14 +419,18 @@ class HMM(hmm.simple.HMM):
         return log_like_list
 
     def initialize_y_model(
-        self: HMM,
-        y,  #  Type must work for self.y_mod.observe(y)
-        state_sequence: typing.Optional[numpy.ndarray] = None):
-        """ Given data, make plausible y_model.
+            self: HMM,
+            y,
+            state_sequence: typing.Optional[numpy.ndarray] = None):
+        """Given data, make plausible y_model.
 
         Args:
-            y: Observation sequence
-            state_sequence: State sequence
+            y: Observation sequence.  Type must work for self.y_mod.observe(y)
+            state_sequence: Optional state sequence
+
+        Use this method to create an observation model that is not the
+        same for every state and that makes plausible the data in the
+        argument y plausible.
 
         """
         # ToDo: Fails for general y_mod
@@ -435,16 +439,12 @@ class HMM(hmm.simple.HMM):
             state_sequence = numpy.array(self.state_simulate(n_times),
                                          numpy.int32)
 
-        # Set alpha and beta so that in reestimate they enforce the
-        # simulated state sequence
-        self.alpha = numpy.zeros((n_times, self.n_states))
-        t = numpy.arange(n_times)
-        self.alpha[t, state_sequence] = 1
-        self.beta = self.alpha
+        # Set alpha to enforce the simulated state sequence in reestimate
+        alpha = numpy.zeros((n_times, self.n_states))
+        for t in range(n_times):
+            alpha[t, state_sequence[t]] = 1
 
-        self.gamma_inv = numpy.ones(n_times)
-        self.state_likelihood = numpy.ones((n_times, self.n_states))
-        self.reestimate()
+        self.y_mod.reestimate(alpha)
         return self.y_mod
 
     def simulate(self: HMM, length: int):
@@ -626,6 +626,11 @@ class Observation_with_bundles(Observation_0):
         for t in range(self.n_times):
             self._likelihood[t, :] *= self.bundle_and_state[
                 self._y.bundles[t], :]
+            if self._likelihood[t, :].sum() < 1.0e-25:
+                raise ValueError(
+                    'Observation is not plausible from any state.  ' +
+                    'self.likelihood[{0},:]=\n{1}'.format(
+                        t, self._likelihood[t, :]))
 
         return self._likelihood
 
