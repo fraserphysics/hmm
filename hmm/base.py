@@ -523,11 +523,11 @@ class HMM(hmm.simple.HMM):
             bundle2state_score = numpy.dot(bundle_and_state, state2state_score)
 
             # Score of a sequential pair of bundles
-            bundle2bundle_score = numpy.dot(bundle2state_score, bundle_and_state.T)
+            bundle2bundle_score = numpy.dot(bundle2state_score,
+                                            bundle_and_state.T)
 
             # Find best predecessor bundle
             predecessor[t] = bundle2bundle_score.argmax(axis=0)
-
 
             # Assign score_bundle given chosen bundle
             score_bundle = numpy.choose(predecessor[t], bundle2bundle_score)
@@ -588,6 +588,7 @@ class Observation_with_bundles(Observation_0):
         underlying_instance: An instance of the underlying model class
         bundle2state: Keys are bundle ids and values are lists of states
         rng: A numpy.random.Generator for simulation
+        small: Threshold for plausible sum of state likelihoods at a time
 
     Attributes:
 
@@ -602,12 +603,15 @@ class Observation_with_bundles(Observation_0):
     _parameter_keys = 'underlying_model bundle2state'.split()
 
     def __init__(self: Observation_with_bundles,
-                 underlying_instance: Observation_0, bundle2state: dict,
-                 rng: numpy.random.Generator):
+                 underlying_instance: Observation_0,
+                 bundle2state: dict,
+                 rng: numpy.random.Generator,
+                 small=1.0e-30):
         self.underlying_model = underlying_instance
         assert isinstance(self.underlying_model, Observation_0)
         self.bundle2state = bundle2state
         self.n_bundle = len(self.bundle2state)
+        self.small = small
         # Call super().__init__ to check all _parameter_keys assigned
         super().__init__(rng)
 
@@ -728,7 +732,7 @@ class Observation_with_bundles(Observation_0):
         for t in range(self.n_times):
             self._likelihood[t, :] *= self.bundle_and_state[
                 self._y.bundles[t], :]
-            if self._likelihood[t, :].sum() < 1.0e-25:
+            if self._likelihood[t, :].sum() < self.small:
                 raise ValueError(
                     'Observation is not plausible from any state.  ' +
                     'self.likelihood[{0},:]=\n{1}'.format(
