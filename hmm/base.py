@@ -18,9 +18,9 @@ class Observation_0:
     class.  You must use a subclass.
 
     """
-    _parameter_keys = tuple([])  # Specifies parameters reported by
+    _parameter_keys: typing.List[str] = ['n_states']
 
-    # self.__str__.  These parameter
+    # Specifies parameters reported by self.__str__.  These parameter
     # names should be in self.__dict__.
 
     def __init__(self: Observation_0, *args):
@@ -29,7 +29,7 @@ class Observation_0:
         for key in self._parameter_keys:
             assert key in self.__dict__
 
-    def _concatenate(self: Observation_0, y_segs: (tuple, list)) -> tuple:
+    def _concatenate(self: Observation_0, y_segs: typing.Sequence) -> tuple:
         """Concatenate observation segments.  Assumes each is a numpy array.
 
         Args:
@@ -89,7 +89,7 @@ class Observation_0:
         """
         raise RuntimeError('Not implemented.  Use a subclass.')
 
-    def merge(self: Observation_0, raw_outs):
+    def merge(self: Observation_0, raw_outs) -> numpy.ndarray:
         """Reformat raw_outs into suitable form for self.observe()
 
         Motivating example: raw_outs is a list of tuples (bundle, y)
@@ -140,7 +140,7 @@ class IntegerObservation(Observation_0):
 
     """
 
-    _parameter_keys = ('_py_state',)
+    _parameter_keys = ['_py_state']
 
     def __init__(self: IntegerObservation, py_state: numpy.ndarray,
                  rng: numpy.random.Generator):
@@ -218,6 +218,8 @@ class HMM(hmm.simple.HMM):
     observation class has information about bundles.
 
     """
+    y_mod: Observation_0  # type: ignore
+    # Allow y_mod type to conflict with hmm.simple.HMM
 
     def reestimate(self: HMM):
         """Phase of Baum Welch training that reestimates model parameters
@@ -469,94 +471,6 @@ class HMM(hmm.simple.HMM):
         # Observation_with_bundles
         return states, self.y_mod.merge(raw_outs)
 
-    def broken_decode(self: HMM, y) -> numpy.ndarray:
-        """Implements the flawed algorithm from first edition of the book.
-
-        Args:
-            self: An HMM with an observation model for Bundle_segment instances
-            y[0]: A single observation sequence appropriate for the underlying
-                observation model
-
-        Returns:
-           Flawed estimate of the maximum likelihood sequence of bundles
-        """
-        assert len(y) == 1
-
-        bundle2state_dict = self.y_mod.bundle2state  # Dict
-        n_bundles = self.y_mod.n_bundle
-        bundle_and_state = self.y_mod.bundle_and_state
-
-        underlying = self.y_mod.underlying_model
-
-        t_seg = underlying.observe(y)
-        n_times = t_seg[-1]
-        likelihood = underlying.calculate()
-
-        # predecessor[t, i_bundle] is the bundle[t-1] in the best
-        # sequence bundle[:t] given y[:t] and bundle[t] = i_bundle
-        predecessor = numpy.empty((n_times, n_bundles), dtype=numpy.int32)
-
-        # Prepare to start iterating at t=1
-
-        # At time t, score_state[i_state] = score of i_state given
-        # previous ys and selected predecessor bundles
-        score_state = self.p_state_time_average * likelihood[0]
-
-        # At time t, score_bundle[i_bundle] = score of i_bundle given
-        # previous ys and selected predecessor bundles
-        score_bundle = numpy.dot(bundle_and_state, score_state)
-
-        # Make the score of each state in a bundle = the score of that
-        # state given the bundle todo ?
-        for bundle in range(n_bundles):
-            if score_bundle[bundle] == 0.0:
-                continue
-            score_state[bundle2state_dict[bundle]] /= score_bundle[bundle]
-
-        for t in range(1, n_times):
-            # Score of sequential pairs of states (todo: wrong)
-            state2state_score = self.p_state2state.cost(
-                numpy.dot(score_bundle, bundle_and_state) * score_state,
-                likelihood[t])
-
-            # Score of bundle@t and state@(t-1)
-            bundle2state_score = numpy.dot(bundle_and_state, state2state_score)
-
-            # Score of a sequential pair of bundles
-            bundle2bundle_score = numpy.dot(bundle2state_score,
-                                            bundle_and_state.T)
-
-            # Find best predecessor bundle
-            predecessor[t] = bundle2bundle_score.argmax(axis=0)
-
-            # Assign score_bundle given chosen bundle
-            score_bundle = numpy.choose(predecessor[t], bundle2bundle_score)
-            divisor = score_bundle.max()
-            if divisor == 0.0:
-                print('Stuck with an impossible bundle sequence.  Hacking now')
-                score_bundle[:] = 1.0
-                score_state[:] = 1.0
-            score_bundle /= score_bundle.max()
-
-            # Forget state history (todo: wrong?) and assign
-            # score_state in each bundle conditional on selected
-            # predecessor bundle
-            for bundle in range(n_bundles):
-                states = bundle2state_dict[bundle]
-                old_bundle = predecessor[t, bundle]
-                score_state[states] = bundle2state_score[old_bundle, states]
-                divisior = score_state[states].sum()
-                if divisior == 0.0:
-                    continue
-                score_state[states] /= divisior
-        # Backtrack
-        last_bundle = numpy.argmax(score_bundle)
-        sequence = numpy.empty((n_times,), dtype=numpy.int32)
-        for t in range(n_times - 1, -1, -1):
-            sequence[t] = last_bundle
-            last_bundle = predecessor[t, last_bundle]
-        return sequence
-
 
 class Bundle_segment:
     """A pair of time series: bundle ids and observations.
@@ -617,7 +531,7 @@ class Observation_with_bundles(Observation_0):
 
         # Find out how many states there are and ensure that each
         # state is in only one bundle.
-        states = set()
+        states: typing.Set[int] = set()
         for x in self.bundle2state.values():
             # Assert that no state is in more than one bundle.  Think
             # before relaxing this.
@@ -642,7 +556,8 @@ class Observation_with_bundles(Observation_0):
                 self.state2bundle[state_id] = bundle_id
 
     def observe(  # pylint: disable = arguments-differ
-            self: Observation_with_bundles, bundle_segment_list: list) -> int:
+            self: Observation_with_bundles,
+            bundle_segment_list: list) -> numpy.ndarray:
         """Attach observations to self as a single Bundle_segment
 
         Args:
@@ -659,8 +574,9 @@ class Observation_with_bundles(Observation_0):
         return self.t_seg
 
     def _concatenate(  # pylint: disable = arguments-differ
-            self: Observation_with_bundles,
-            bundle_segment_list: list) -> Bundle_segment:
+        self: Observation_with_bundles,
+        bundle_segment_list: typing.Sequence) -> typing.Tuple[Bundle_segment,
+                                                              list]:
         """ Create a single Bundle_segment from a list of segments
 
         Args:
@@ -689,8 +605,7 @@ class Observation_with_bundles(Observation_0):
         """
         return self.state2bundle[state], self.underlying_model.random_out(state)
 
-    def merge(self: Observation_with_bundles,
-              raw_outs: list) -> Observation_with_bundles:
+    def merge(self: Observation_with_bundles, raw_outs: list) -> Bundle_segment:
         """ Merge isolated pairs (bundle, y) into an Observation_with_bundles.
 
         Args:

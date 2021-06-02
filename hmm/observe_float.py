@@ -49,8 +49,8 @@ class Gauss(hmm.base.IntegerObservation):
 
     def __init__(  # pylint: disable = super-init-not-called
         self: Gauss,
-        mu: float,
-        var: float,
+        mu: numpy.ndarray,
+        var: numpy.ndarray,
         rng: numpy.random.Generator,
     ):
         assert len(var) == len(mu)
@@ -63,8 +63,10 @@ class Gauss(hmm.base.IntegerObservation):
         self.n_states = len(var)
 
     # Ignore: Super returned int
-    def random_out(  # pylint: disable = arguments-differ
-            self: Gauss, s: int) -> float:
+    def random_out(  # type: ignore
+            # pylint: disable = arguments-differ
+            self: Gauss,
+            s: int) -> float:
         """ For simulation, draw a random observation given state s
 
         Args:
@@ -90,8 +92,10 @@ class Gauss(hmm.base.IntegerObservation):
         return self._likelihood
 
     # Ignore: Super has optional argument warn
-    def reestimate(  # pylint: disable = arguments-differ
-            self: Gauss, w: numpy.ndarray):
+    def reestimate(  # type: ignore
+            # pylint: disable = arguments-differ
+            self: Gauss,
+            w: numpy.ndarray):
         """
         Estimate new model parameters.  self._y already assigned
 
@@ -108,6 +112,7 @@ class Gauss(hmm.base.IntegerObservation):
         self.var = (d * d).sum(axis=0) / wsum
         self.sigma = numpy.sqrt(self.var)
         self.norm = 1 / numpy.sqrt(2 * numpy.pi * self.var)
+
 
 # Todo: Test this class
 class MultivariateGaussian(hmm.base.Observation_0):
@@ -303,7 +308,7 @@ class AutoRegressive(hmm.base.Observation_0):
         numpy.set_printoptions(precision=save)
         return rv
 
-    def _concatenate(self: AutoRegressive, y_segs: (tuple, list)) -> tuple:
+    def _concatenate(self: AutoRegressive, y_segs: typing.Sequence) -> tuple:
         """Attach context to self and return the modified concatenated data
         and segment information.
 

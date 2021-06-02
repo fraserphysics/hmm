@@ -71,7 +71,6 @@ class HMM:
 
     """
 
-    # p_state_time_average, p_state_transition, observation_model
     def __init__(self: HMM,
                  p_state_initial: numpy.ndarray,
                  p_state_time_average: numpy.ndarray,
@@ -88,6 +87,9 @@ class HMM:
         self.p_state_time_average = numpy.array(p_state_time_average)
         self.p_state2state = Prob(numpy.array(p_state2state))
         self.y_mod = y_mod
+        self.gamma_inv: numpy.ndarray = None
+        self.alpha: numpy.ndarray = None
+        self.beta: numpy.ndarray = None
 
     def forward(self: HMM) -> float:
         """Recursively calculate state probabilities.

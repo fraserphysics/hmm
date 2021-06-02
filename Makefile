@@ -5,6 +5,10 @@ docs/api/build/html/index.html : docs/api/source/conf.py
 	pushd docs/api; rm -rf build; make html; popd
 	@echo To view: firefox --no-remote docs/api/build/html/index.html
 
+## gpl.txt                        : License for distributing the hmm software
+gpl.txt:
+	wget https://www.gnu.org/licenses/gpl-3.0.txt -O $@
+
 ## test                           : Discover and run all tests in hmm
 .PHONY : test
 test :
