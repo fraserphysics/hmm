@@ -66,7 +66,7 @@ class Observation_0:
         verify)
 
         """
-        raise RuntimeError('Not implemented.  Use a subclass.')
+        raise NotImplementedError('Not implemented.  Use a subclass.')
 
     def random_out(self: Observation_0, state: int):
         """ Returns a random draw from Prob(y|state)
@@ -78,7 +78,7 @@ class Observation_0:
             (object): A single observation
 
         """
-        raise RuntimeError('Not implemented.  Use a subclass.')
+        raise NotImplementedError('Not implemented.  Use a subclass.')
 
     def calculate(self: Observation_0) -> numpy.ndarray:
         """Calculate and return the likelihoods of states given observations.
@@ -87,7 +87,7 @@ class Observation_0:
             self._likelihood where _likelihood[t,i] = Prob(y[t]|state[t]=i)
 
         """
-        raise RuntimeError('Not implemented.  Use a subclass.')
+        raise NotImplementedError('Not implemented.  Use a subclass.')
 
     def merge(self: Observation_0, raw_outs) -> numpy.ndarray:
         """Reformat raw_outs into suitable form for self.observe()
@@ -219,6 +219,7 @@ class HMM(hmm.simple.HMM):
 
     """
     y_mod: Observation_0  # type: ignore
+
     # Allow y_mod type to conflict with hmm.simple.HMM
 
     def reestimate(self: HMM):
@@ -489,8 +490,8 @@ class Bundle_segment:
         return len(self.bundles)
 
     def __str__(self: Bundle_segment) -> str:
-        return """y values:{0:s}
-bundle values:{1:s}
+        return """y values:{0}
+bundle values:{1}
 """.format(self.y, self.bundles)
 
 

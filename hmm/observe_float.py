@@ -164,8 +164,7 @@ class MultivariateGaussian(hmm.base.Observation_0):
 
     def random_out(  # pylint: disable = arguments-differ
             self: MultivariateGaussian, s: int) -> numpy.ndarray:
-        raise RuntimeError(
-            'random_out not implemented for MultivariateGaussian')
+        return self._rng.multivariate_normal(self.mu[s], self.sigma[s])
 
     def __str__(self: MultivariateGaussian) -> str:
         save = numpy.get_printoptions()['precision']
@@ -291,9 +290,19 @@ class AutoRegressive(hmm.base.Observation_0):
         self.inverse_wishart_b = inverse_wishart_b
         self.small = small
 
+    def initialize_out(self: AutoRegressive):
+        """ Prepare for calls to self.random_out
+        """
+        self.history = numpy.zeros(self.ar_order + 1)
+        self.history[-1] = 1.0
+
     def random_out(  # pylint: disable = arguments-differ
             self: AutoRegressive, s: int) -> numpy.ndarray:
-        raise RuntimeError('random_out not implemented for AutoRegressive')
+        mu = numpy.dot(self.history, self.ar_coefficients_offset[s])
+        rv = self._rng.normal(mu, self.variance[s])
+        self.history[:self.ar_order - 1] = self.history[1:self.ar_order]
+        self.history[self.ar_order - 1] = rv
+        return rv
 
     def __str__(self: AutoRegressive) -> str:
         save = numpy.get_printoptions()['precision']

@@ -14,7 +14,7 @@ gpl.txt:
 test :
 	pytest hmm
 
-## check-types
+## check-types                    : Checks type hints
 .PHONY : check-types
 check-types:
 	mypy hmm/

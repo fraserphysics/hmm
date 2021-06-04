@@ -131,6 +131,15 @@ class TestHMM(BaseClass):
     def test_str(self):
         self.assertTrue(isinstance(self.base_hmm.__str__(), str))
 
+    def test_t_skip(self):
+        self.base_hmm.y_mod.observe(self.y[:1])
+        self.base_hmm.state_likelihood = self.base_hmm.y_mod.calculate()
+        n_times = self.base_hmm.y_mod.n_times
+        n_states = self.base_hmm.n_states
+        self.base_hmm.alpha = numpy.empty((n_times, n_states))
+        self.base_hmm.gamma_inv = numpy.empty((n_times,))
+        self.assertTrue(self.base_hmm.forward(t_skip=5) > -2000.0)
+
     def test_multi_train(self):
         """ Test training
         """
@@ -172,6 +181,14 @@ class TestObservation_with_bundles(BaseClass):
         bundles = [out[0] for out in outs]
         ys = [out[1] for out in outs]
         self.data = [hmm.base.Bundle_segment(bundles, ys) for x in range(3)]
+
+    def test_bundle_segment_str(self):
+        self.assertTrue(
+            str(self.data[0]) ==
+            'y values:[1, 1, 2, 3, 5, 5]\nbundle values:[0, 0, 0, 1, 2, 2]\n')
+
+    def test_bundle_segment_len(self):
+        self.assertTrue(len(self.data[0]) == 6)
 
     def test_observe(self):
         t_seg = self.Observation_with_bundles.observe(self.data)
