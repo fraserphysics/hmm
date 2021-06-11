@@ -225,7 +225,7 @@ class HMM:
         ll = log_likelihood_list[-1]
         ll_prev = log_likelihood_list[-2]
         delta = ll - ll_prev
-        if delta / abs(ll) < -1.0e-14:  # Todo: Why not zero?
+        if delta / abs(ll) < -1.0e-15:  # Todo: Why not zero?
             iteration = len(log_likelihood_list)
             raise ValueError("""
 Training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4}

@@ -421,8 +421,6 @@ class HMM(hmm.simple.HMM):
                 message += "L[{0}]={1:7.4f} ".format(
                     seg, log_likelihood / self.n_times)
 
-            self.reestimate()
-
             # Record/report/check this iteration
             if hasattr(self.y_mod, 'log_prior'):
                 utility = sum_log_like + self.y_mod.log_prior()
@@ -431,6 +429,8 @@ class HMM(hmm.simple.HMM):
             utility_list.append(utility / self.n_times)
             message += "avg={0:10.7f}".format(utility_list[-1])
             self.ensure_monotonic(utility_list, display, message)
+
+            self.reestimate()
 
         self.p_state_initial[:] = p_state_initial_all.sum(axis=0)
         self.p_state_initial /= self.p_state_initial.sum()

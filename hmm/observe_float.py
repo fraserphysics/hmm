@@ -132,8 +132,16 @@ class GaussMAP(Gauss):
     instead of maximum likelihood.  The prior is inverse gamma
 
     """
-    alpha = 1.0
-    beta = 1.0
+
+    def __init__(self: GaussMAP,
+                 mu: numpy.ndarray,
+                 var: numpy.ndarray,
+                 rng: numpy.random.generator,
+                 alpha: float = 1,
+                 beta: float = 1):
+        super().__init__(mu, var, rng)
+        self.alpha = alpha
+        self.beta = beta
 
     def log_prior(self):
         return_value = 0.0
@@ -144,7 +152,7 @@ class GaussMAP(Gauss):
 
     def diffs_to_var(self: GaussMAP, diffs: numpy.ndarray, wsum: float):
         numerator = 2 * self.beta + (diffs * diffs).sum(axis=0)
-        denominator = 2 * self.alpha + 1 + wsum
+        denominator = 2 * self.alpha + 2 + wsum
         return numerator / denominator
 
 
