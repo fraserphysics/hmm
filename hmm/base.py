@@ -86,6 +86,7 @@ class Observation_0:
         Returns:
             self._likelihood where _likelihood[t,i] = Prob(y[t]|state[t]=i)
 
+        self.observe must be called first to assign measured data to self.
         """
         raise NotImplementedError('Not implemented.  Use a subclass.')
 
@@ -132,7 +133,7 @@ class Observation_0:
 
 
 class IntegerObservation(Observation_0):
-    r"""Observation model for integers with y[t] \in [0,y_max) \forall t
+    r"""Observation model for integers with y[t] \in [0:y_max] \forall t
 
     Args:
         py_state: Conditional probability of each y give each state
@@ -155,7 +156,7 @@ class IntegerObservation(Observation_0):
             w: numpy.ndarray,
             warn: typing.Optional[bool] = True):
         """
-        Estimate new model parameters
+        Estimate new model parameters.
 
         Args:
             w: w[t,s] = Prob(state[t]=s) given data and
@@ -187,7 +188,7 @@ class IntegerObservation(Observation_0):
         Calculate likelihoods: self._likelihood[t,i] = P(y(t)|state(t)=i)
 
         Returns:
-            state_likelihood[t,i] \forall t \in [0,n_times) and i \in [0,n_states)
+            state_likelihood[t,i] \forall t \in [0:n_times] and i \in [0:n_states]
 
         Assumes a previous call to measure has assigned self._y and allocated
             self._likelihood
@@ -218,9 +219,8 @@ class HMM(hmm.simple.HMM):
     observation class has information about bundles.
 
     """
-    y_mod: Observation_0  # type: ignore
-
     # Allow y_mod type to conflict with hmm.simple.HMM
+    y_mod: Observation_0  # type: ignore
 
     def reestimate(self: HMM):
         """Phase of Baum Welch training that reestimates model parameters
@@ -273,7 +273,7 @@ class HMM(hmm.simple.HMM):
             t_stop: int = 0,
             t_skip: int = 0,
             last_0=None) -> float:
-        """Recursively calculate state probabilities.
+        """Recursively calculate state probabilities, P(s[t]|y[0:t])
 
         Args:
             t_start: Use self.state_likelihood[t_start] first
@@ -282,6 +282,11 @@ class HMM(hmm.simple.HMM):
 
         Returns:
             Log (base e) likelihood of HMM given entire observation sequence
+
+        Works on a single uninterrupted sequence of observations that
+        may be only part of a larger set.  As side effect, it sets
+        self.alpha and self.gamma_inv for the same range of t as the
+        observations.
 
         """
         if t_stop == 0:
@@ -336,11 +341,12 @@ class HMM(hmm.simple.HMM):
             n_iter: The number of iterations to execute
 
         Returns:
-            List of log likelihood per observation for each iteration
+            List of utility (log likelihood or log MAP) per observation
+            for each iteration
 
-        The differences from base.HMM: 1. More than one independent
-        observation sequence.  2. The structure of observations is not
-        specified.
+        Generalizes simple.HMM by allowing more than one independent
+        observation sequence.  Also accommodates MAP estimation
+        instead of MLE.
 
         For the first training iteration, the initial distribution of
         states at the beginning of each observation sequence is given
@@ -369,9 +375,9 @@ class HMM(hmm.simple.HMM):
 
         # pylint: disable = attribute-defined-outside-init
 
-        # log_like_list[i] = log(Prob(ys|HMM[iteration=i]))/n_times, ie,
-        # the log likelihood per time step
-        log_like_list = []
+        # utility_list[i] = log(Prob(ys|HMM[iteration=i]))/n_times, ie,
+        # the log likelihood per time step, or MAP
+        utility_list = []
 
         t_seg = self.y_mod.observe(ys)  # Segment boundaries
         self.n_times = self.y_mod.n_times
@@ -396,7 +402,7 @@ class HMM(hmm.simple.HMM):
 
             # Operate on each observation segment separately and put
             # the results in the corresponding segement of the alpha,
-            # beta and gamma arrays.
+            # beta and gamma_inv arrays.
 
             for seg in range(n_seg):
                 # Set up self to run forward and backward on this segment
@@ -418,27 +424,31 @@ class HMM(hmm.simple.HMM):
             self.reestimate()
 
             # Record/report/check this iteration
-            log_like_list.append(sum_log_like / self.n_times)
-            message += "avg={0:10.7f}".format(log_like_list[-1])
-            self.ensure_monotonic(log_like_list, display, message)
+            if hasattr(self.y_mod, 'log_prior'):
+                utility = sum_log_like + self.y_mod.log_prior()
+            else:
+                utility = sum_log_like
+            utility_list.append(utility / self.n_times)
+            message += "avg={0:10.7f}".format(utility_list[-1])
+            self.ensure_monotonic(utility_list, display, message)
 
         self.p_state_initial[:] = p_state_initial_all.sum(axis=0)
         self.p_state_initial /= self.p_state_initial.sum()
-        return log_like_list
+        return utility_list
 
     def initialize_y_model(
             self: HMM,
             y,
             state_sequence: typing.Optional[numpy.ndarray] = None):
-        """Given data, make plausible y_model.
+        """Given data, make a plausible y_model.
 
         Args:
             y: Observation sequence.  Type must work for self.y_mod.observe(y)
             state_sequence: Optional state sequence
 
         Use this method to create an observation model that is not the
-        same for every state and that makes plausible the data in the
-        argument y plausible.
+        same for every state and that makes the data in the argument y
+        plausible.
 
         """
         # ToDo: Fails for general y_mod

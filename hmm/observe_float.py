@@ -41,8 +41,8 @@ class Gauss(hmm.base.IntegerObservation):
             each state.
         rng: Generator with state
 
-    The probability of obsrevation y given state s is:
-    P(y|s) = 1/\sqrt(2\pi var[s]) exp(-(y-mu[s])^2/(2var[s])
+    The probability of observation y given state s is:
+    Prob(y|s) = 1/\sqrt(2\pi var[s]) exp(-(y-mu[s])^2/(2*var[s])
 
     """
     _parameter_keys = "mu var".split()
@@ -79,17 +79,30 @@ class Gauss(hmm.base.IntegerObservation):
         return (self._rng.normal(self.mu[s], self.sigma[s]))
 
     def calculate(self: Gauss,) -> numpy.ndarray:
-        """
-        Calculate and return likelihoods.
+        """Calculate and return likelihoods of states for all observations.
 
         Returns:
-            self.p_y[t,i] = P(y(t)|s(t)=i)
+            self.p_y with self.p_y[t,s] = Prob(y[t]|state[t]=s)
 
         """
         assert self._y.reshape((-1, 1)).shape == (self.n_times, 1)
         d = self.mu - self._y.reshape((-1, 1))
         self._likelihood = numpy.exp(-d * d / (2 * self.var)) * self.norm
         return self._likelihood
+
+    def diffs_to_var(self: Gauss, diffs: numpy.ndarray, wsum: float) -> float:
+        """ Formula for reestimating variance.
+
+        Args:
+            diffs
+            wsum
+
+        Returns:
+            New estimate of variance
+
+        Not in-line for convenience of MAP subclass
+        """
+        return (diffs * diffs).sum(axis=0) / wsum
 
     # Ignore: Super has optional argument warn
     def reestimate(  # type: ignore
@@ -108,13 +121,33 @@ class Gauss(hmm.base.IntegerObservation):
         y = self._y
         wsum = w.sum(axis=0)
         self.mu = (w.T * y).sum(axis=1) / wsum
-        d = (self.mu - y.reshape((-1, 1))) * numpy.sqrt(w)
-        self.var = (d * d).sum(axis=0) / wsum
+        diffs = (self.mu - y.reshape((-1, 1))) * numpy.sqrt(w)
+        self.var = self.diffs_to_var(diffs, wsum)
         self.sigma = numpy.sqrt(self.var)
         self.norm = 1 / numpy.sqrt(2 * numpy.pi * self.var)
 
 
-# Todo: Test this class
+class GaussMAP(Gauss):
+    """For the variance use maximum a posteriori probability estimation
+    instead of maximum likelihood.  The prior is inverse gamma
+
+    """
+    alpha = 1.0
+    beta = 1.0
+
+    def log_prior(self):
+        return_value = 0.0
+        for s in range(self.n_states):
+            return_value += -(self.alpha + 1) * numpy.log(
+                self.var[s]) - self.beta / self.var[s]
+        return return_value
+
+    def diffs_to_var(self: GaussMAP, diffs: numpy.ndarray, wsum: float):
+        numerator = 2 * self.beta + (diffs * diffs).sum(axis=0)
+        denominator = 2 * self.alpha + 1 + wsum
+        return numerator / denominator
+
+
 class MultivariateGaussian(hmm.base.Observation_0):
     """Observation model for vector measurements.
 
@@ -152,10 +185,10 @@ class MultivariateGaussian(hmm.base.Observation_0):
         self.inverse_sigma = numpy.empty(
             (self.n_states, self.dimension, self.dimension))
         self.norm = numpy.empty(self.n_states)
-        for i in range(self.n_states):
-            self.inverse_sigma[i, :, :] = numpy.linalg.inv(self.sigma[i, :, :])
-            determinant = numpy.linalg.det(sigma[i, :, :])
-            self.norm[i] = 1 / numpy.sqrt(
+        for s in range(self.n_states):
+            self.inverse_sigma[s, :, :] = numpy.linalg.inv(self.sigma[s, :, :])
+            determinant = numpy.linalg.det(sigma[s, :, :])
+            self.norm[s] = 1 / numpy.sqrt(
                 (2 * numpy.pi)**self.dimension * determinant)
         self._rng = rng
         self.inverse_wishart_a = inverse_wishart_a
@@ -170,11 +203,11 @@ class MultivariateGaussian(hmm.base.Observation_0):
         save = numpy.get_printoptions()['precision']
         numpy.set_printoptions(precision=3)
         rv = 'Model %s instance\n' % self.__class__
-        for i in range(self.n_states):
-            rv += 'For state %d:\n' % i
-            rv += ' inverse_sigma = \n%s\n' % self.inverse_sigma[i]
-            rv += ' mu = %s' % self.mu[i]
-            rv += ' norm = %f\n' % self.norm[i]
+        for s in range(self.n_states):
+            rv += 'For state %d:\n' % s
+            rv += ' inverse_sigma = \n%s\n' % self.inverse_sigma[s]
+            rv += ' mu = %s' % self.mu[s]
+            rv += ' norm = %f\n' % self.norm[s]
         numpy.set_printoptions(precision=save)
         return rv
 
@@ -183,7 +216,7 @@ class MultivariateGaussian(hmm.base.Observation_0):
         Calculate and return likelihoods.
 
         Returns:
-            self.p_y[t,i] = P(y(t)|s(t)=i)
+            self.p_y[t,s] = Prob(y[t]|state[t]=s)
 
         Assumes self.observe has assigned a single numpy.ndarray to self._y
         """
@@ -191,13 +224,13 @@ class MultivariateGaussian(hmm.base.Observation_0):
             self.n_times,
             self.dimension), 'You must call observe before calling calculate.'
         for t in range(self.n_times):
-            for i in range(self.n_states):
-                d = (self._y[t] - self.mu[i])
-                dQd = float(numpy.dot(d, numpy.dot(self.inverse_sigma[i], d)))
+            for s in range(self.n_states):
+                d = (self._y[t] - self.mu[s])
+                dQd = float(numpy.dot(d, numpy.dot(self.inverse_sigma[s], d)))
                 if dQd > 300:  # Underflow
-                    self._likelihood[t, i] = 0
+                    self._likelihood[t, s] = 0
                 else:
-                    self._likelihood[t, i] = self.norm[i] * numpy.exp(-dQd / 2)
+                    self._likelihood[t, s] = self.norm[s] * numpy.exp(-dQd / 2)
             if self._likelihood[t, :].sum() < self.small:
                 raise ValueError("""Observation is not plausible from any state.
 self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
@@ -219,21 +252,20 @@ self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
         wsum = w.sum(axis=0)
         self.mu = (numpy.inner(y.T, w.T) / wsum).T
         # Inverse Wishart prior parameters.  Without data self.sigma = b/a
-        for i in range(self.n_states):
+        for s in range(self.n_states):
             rrsum = numpy.zeros((self.dimension, self.dimension))
             for t in range(self.n_times):
-                r = y[t] - self.mu[i]
-                rrsum += w[t, i] * numpy.outer(r, r)
+                r = y[t] - self.mu[s]
+                rrsum += w[t, s] * numpy.outer(r, r)
             self.sigma = (self.inverse_wishart_b * numpy.eye(self.dimension) +
-                          rrsum) / (self.inverse_wishart_a + wsum[i])
+                          rrsum) / (self.inverse_wishart_a + wsum[s])
             det = numpy.linalg.det(self.sigma)
             assert (det > 0.0)
-            self.inverse_sigma[i, :, :] = numpy.linalg.inv(self.sigma)
-            self.norm[i] = 1.0 / (numpy.sqrt(
+            self.inverse_sigma[s, :, :] = numpy.linalg.inv(self.sigma)
+            self.norm[s] = 1.0 / (numpy.sqrt(
                 (2 * numpy.pi)**self.dimension * det))
 
 
-# Todo: Test this class
 class AutoRegressive(hmm.base.Observation_0):
     r"""Scalar autoregressive model with Gaussian residuals
 
@@ -245,8 +277,8 @@ class AutoRegressive(hmm.base.Observation_0):
         inverse_wishart_b: Part of prior for variance
         small: Throw error if likelihood at any time is less than small
 
-    Model: likelihood[t,i] = Normal(mu_{t,i}, var[i]) at _y[t]
-           where mu_{t,i} = ar_coefficients[i] \cdot _y[t-n_ar:t] + offset[i]
+    Model: likelihood[t,s] = Normal(mu_{t,s}, var[s]) at _y[t]
+           where mu_{t,s} = ar_coefficients[s] \cdot _y[t-n_ar:t] + offset[s]
 
            In method calculate, likelihoods are set to zero for t
            closer to starting segment boundaries than AR-order because
@@ -283,8 +315,8 @@ class AutoRegressive(hmm.base.Observation_0):
 
         self.variance = variance
         self.norm = numpy.empty(self.n_states)
-        for i in range(self.n_states):
-            self.norm[i] = 1 / numpy.sqrt(2 * numpy.pi * self.variance[i])
+        for s in range(self.n_states):
+            self.norm[s] = 1 / numpy.sqrt(2 * numpy.pi * self.variance[s])
         self._rng = rng
         self.inverse_wishart_a = inverse_wishart_a
         self.inverse_wishart_b = inverse_wishart_b
@@ -308,12 +340,12 @@ class AutoRegressive(hmm.base.Observation_0):
         save = numpy.get_printoptions()['precision']
         numpy.set_printoptions(precision=3)
         rv = 'Model %s instance\n' % type(self)
-        for i in range(self.n_states):
-            rv += 'For state %d:\n' % i
-            rv += ' variance = \n%s\n' % self.variance[i]
-            rv += ' ar_coefficients = %s' % self.ar_coefficients_offset[i, :-1]
-            rv += ' offset = %s' % self.ar_coefficients_offset[i, -1]
-            rv += ' norm = %f\n' % self.norm[i]
+        for s in range(self.n_states):
+            rv += 'For state %d:\n' % s
+            rv += ' variance = \n%s\n' % self.variance[s]
+            rv += ' ar_coefficients = %s' % self.ar_coefficients_offset[s, :-1]
+            rv += ' offset = %s' % self.ar_coefficients_offset[s, -1]
+            rv += ' norm = %f\n' % self.norm[s]
         numpy.set_printoptions(precision=save)
         return rv
 
@@ -359,10 +391,18 @@ class AutoRegressive(hmm.base.Observation_0):
         Calculate and return likelihoods.
 
         Returns:
-            likelihood where likelihood[t,i] = Prob(y(t)|s(t)=i)
+            likelihood where likelihood[t,s] = Prob(y[t]|state[t]=s)
 
         """
         assert self._y.shape == (self.n_times,)
+
+        log_prob_model = 0
+        for s in range(self.n_states):
+            log_prob_model -= numpy.log(self.variance[
+                s]) * self.inverse_wishart_a / 2 + self.inverse_wishart_b / (
+                    2 * self.variance[s])
+        factor = numpy.exp(log_prob_model / self.n_times)
+        factor = 1.0
 
         for t in range(self.n_times):
             delta = self._y[t] - numpy.dot(self.ar_coefficients_offset,
@@ -382,6 +422,7 @@ class AutoRegressive(hmm.base.Observation_0):
             if self._likelihood[t, :].sum() < self.small:
                 raise ValueError("""Observation is not plausible from any state.
 self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
+            self._likelihood *= factor
         return self._likelihood
 
     def reestimate(
@@ -402,19 +443,19 @@ self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
         wsum = w2.sum(axis=0)
         w1 = numpy.sqrt(w2)  # n_times x n_states array of weights
 
-        for i in range(self.n_states):
-            w_y = w1[:, i] * self._y
-            w_context = (w1[:, i] * self.context.T).T
+        for s in range(self.n_states):
+            w_y = w1[:, s] * self._y
+            w_context = (w1[:, s] * self.context.T).T
             # pylint: disable = unused-variable
             fit, residuals, rank, singular_values = numpy.linalg.lstsq(
                 w_context, w_y, rcond=None)
             assert rank == self.ar_order + 1
-            self.ar_coefficients_offset[i, :] = fit
+            self.ar_coefficients_offset[s, :] = fit
             delta = w_y - numpy.inner(w_context, fit)
             sum_squared_error = numpy.inner(delta, delta)
-            self.variance[i] = (self.inverse_wishart_b + sum_squared_error) / (
-                self.inverse_wishart_a + wsum[i])
-            self.norm[i] = 1 / numpy.sqrt(2 * numpy.pi * self.variance[i])
+            self.variance[s] = (self.inverse_wishart_b + sum_squared_error) / (
+                self.inverse_wishart_a + wsum[s])
+            self.norm[s] = 1 / numpy.sqrt(2 * numpy.pi * self.variance[s])
 
 
 # --------------------------------

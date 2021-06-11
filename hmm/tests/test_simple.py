@@ -183,9 +183,10 @@ class TestProb(BaseClass):
         numpy.testing.assert_allclose(
             self.c.likelihoods([0, 1, 2])[2], [1, 1, 0])
 
-    def test_cost(self):
-        numpy.testing.assert_almost_equal(self.c.cost(
-            self.b.T[0], self.b.T[1]), [[0, 0, 0], [0, 0, 0.375], [0.25, 0, 0]])
+    def test_utility(self):
+        numpy.testing.assert_almost_equal(
+            self.c.utility(self.b.T[0], self.b.T[1]),
+            [[0, 0, 0], [0, 0, 0.375], [0.25, 0, 0]])
 
     def test_step_forward(self):
         b = numpy.array([1., 0.5, 0.75])

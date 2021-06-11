@@ -2,11 +2,15 @@
 
 Classes:
 
+    :py:class:`HMM`:
+        A Hidden Markov Model implementation
+
     :py:class:`Observation`:
         Models of discrete observations
 
-    :py:class:`HMM`:
-        A Hidden Markov Model implementation
+    :py:class:`Prob`:
+        A subclass of ndarray for conditional probability matrices
+
 """
 # Nomenclature:
 #
@@ -52,9 +56,9 @@ class HMM:
 
     Args:
         p_state_initial : Initial distribution of states
-        p_state_time_average : Stationary distribution of states
+        p_state_time_average : Time average distribution of states
         p_state2state : Probability of state given state:
-            p_state2state[a, b] = Prob(s(1)=b|s(0)=a)
+            p_state2state[a, b] = Prob(s[1]=b|s[0]=a)
         y_mod : Instance of class for probabilities of observations
         rng : Numpy generator with state
 
@@ -65,7 +69,7 @@ class HMM:
     the methods of HMM.
 
     By initializing with rng created by the caller with, eg
-    numpy.random.default_rng(), one can ensure reproducible
+    numpy.random.default_rng(seed), one can ensure reproducible
     pseudo-random sequences and avoid using the same pseudo-random
     sequences in different parts of the code.
 
@@ -111,8 +115,8 @@ class HMM:
 
         On return:
 
-        - 1/self.gamma_inv[t] = Prob{y(t)=y(t)|y_0^{t-1}}
-        - self.alpha[t, i] = Prob{s(t)=i|y_0^t}
+        - 1/self.gamma_inv[t] = Prob{y[t]=y[t]|y[0:t]}
+        - self.alpha[t, i] = Prob{s[t]=i|y[0:t+1]}
 
         """
 
@@ -122,7 +126,7 @@ class HMM:
         last = numpy.copy(self.p_state_initial.reshape(-1))  # Copy
         for t in range(len(self.state_likelihood)):
             last *= self.state_likelihood[t]  # Element-wise multiply
-            assert last.sum() > 0
+            assert last.sum() > 0  # Fails if data is impossible
             self.gamma_inv[t] = 1 / last.sum()
             last *= self.gamma_inv[t]
             self.alpha[t, :] = last
@@ -148,10 +152,10 @@ class HMM:
 
         On return:
 
-        - For each state i, beta[t, i] = Pr{y_{t+1}^T|s(t)=i}/Pr{y_{t+1}^T}
+        - For each state i, beta[t, i] = Prob(y[t+1:T]|s[t]=i)/Prob(y[t+1:T])
 
         """
-        # last and beta are analogous to last in alpha in forward(),
+        # last and beta are analogous to last and alpha in forward(),
         # but the precise interpretations are more complicated.
         last = numpy.ones(self.n_states)
         for t in range(len(self.state_likelihood) - 1, -1, -1):
@@ -160,7 +164,8 @@ class HMM:
             last[:] = numpy.dot(self.p_state2state, last)
 
     def calculate(self: HMM):
-        """A hack to prepare for forward outside of train
+        """Prepares for calling forward if it is not called from train.
+
         """
         self.state_likelihood = self.y_mod.calculate()
         self.n_times = self.y_mod.n_times
@@ -223,7 +228,7 @@ class HMM:
         if delta / abs(ll) < -1.0e-14:  # Todo: Why not zero?
             iteration = len(log_likelihood_list)
             raise ValueError("""
-WARNING training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4}
+Training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4}
 """.format(iteration - 1, ll_prev, iteration, ll, delta))
 
     def reestimate(self: HMM):
@@ -288,23 +293,22 @@ WARNING training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4
                                         numpy.int32)
         best_state_sequence = numpy.ones((self.n_times, 1), numpy.int32)
 
-        # Use initial state distribution for first best_path_cost
-        best_path_cost = self.state_likelihood[0] * self.p_state_initial
+        # Use initial state distribution for first best_path_utility
+        best_path_utility = self.state_likelihood[0] * self.p_state_initial
 
         for t in range(1, self.n_times):
-            # cost = p_state2state*outer(best_path_cost, state_likelihood[t])
-            # Could use Prob.cost()
-            cost = (self.p_state2state.T *
-                    best_path_cost).T * self.state_likelihood[t]
-            best_predecessors[t] = cost.argmax(axis=0)
-            best_path_cost = numpy.choose(best_predecessors[t], cost)
-            if best_path_cost.max() == 0:
+            # utility = p_state2state*outer(best_path_utility, state_likelihood[t])
+            utility = (self.p_state2state.T *
+                       best_path_utility).T * self.state_likelihood[t]
+            best_predecessors[t] = utility.argmax(axis=0)
+            best_path_utility = numpy.choose(best_predecessors[t], utility)
+            if best_path_utility.max() == 0:
                 raise ValueError(
                     "Attempt to decode impossible observation sequence")
-            best_path_cost /= best_path_cost.max()  # Prevent underflow
+            best_path_utility /= best_path_utility.max()  # Prevent underflow
 
         # Find the best end state
-        previous_best_state = numpy.argmax(best_path_cost)
+        previous_best_state = numpy.argmax(best_path_utility)
 
         # Backtrack through best_predecessors to find the best
         # sequence.
@@ -332,7 +336,9 @@ WARNING training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4
 
         The returned sequence is not a draw from the random process
         defined by the model.  However the sequence has probability >
-        0.
+        0.  The function does not use an observation function and does
+        not simulate observations.  The simulate method provides draws
+        of states and observations from a fully specified model.
 
         """
 
@@ -353,8 +359,8 @@ WARNING training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4
         self: HMM,
         length: int,
     ) -> typing.Tuple[numpy.ndarray, numpy.ndarray]:
-        """
-        Generate a random sequence of observations of a given length.
+        """Generate a random draw from the model of sequences of states and
+        observations of a given length.
 
         Args:
             length: Number of time steps to simulate
@@ -399,19 +405,17 @@ WARNING training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4
         transitions, self.p_state2state, in which
         self.p_state2state[here, there] is the probability of going to
         state there given that the system is in state here.  The code
-        sets p_state2state[here, there] to p and then re-normalizes.
-        Set self.p_state2state itself if you need to set exact values.
-        You can use this method to modify the state topology before
-        training.
+        sets p_state2state[here, there] to p and then re-normalizes
+        self.p_state2state.  Set self.p_state2state itself if you need
+        to set exact values.  You can use this method to modify the
+        state topology by removing links before training.
 
         """
         self.p_state2state[here, there] = p
         self.p_state2state[here, :] /= self.p_state2state[here, :].sum()
 
     def __str__(self: HMM) -> str:  # HMM instance
-        #save = numpy.get_printoptions
-        # numpy.set_printoptions(precision=3)
-        rv = """{0} with {1:d} states
+        return """{0} with {1:d} states
 p_state_initial:      {2}
 p_state_time_average: {3}
 p_state2state =
@@ -424,8 +428,6 @@ p_state2state =
             self.p_state2state.values(),
             self.y_mod,
         )
-        # numpy.set_printoptions(save)
-        return rv
 
     def deallocate(self: HMM) -> HMM:
         """ Remove arrays assigned by train.
@@ -456,6 +458,8 @@ class Observation:
     calculate
 
     reestimate
+
+    n_states
 
     """
 
@@ -491,12 +495,12 @@ class Observation:
 
     def calculate(self: Observation) -> numpy.ndarray:
         r"""
-        Calculate likelihoods: self._likelihood[t,i] = P(y(t)|state(t)=i)
+        Calculate likelihoods: self._likelihood[t,s] = P(y[t]|state[t]=s)
 
         Returns:
-            state_likelihood[t,i] \forall t \in [0,n_times) and i \in [0,n_states)
+            state_likelihood[t,s] \forall t \in [0:n_times] and s \in [0:n_states]
 
-        Assumes a previous call to measure has assigned self._y and allocated
+        Assumes a previous call to observe has assigned self._y and allocated
             self._likelihood
 
         """
@@ -523,8 +527,7 @@ class Observation:
         Estimate new _py_state
 
         Args:
-            w: w[t,s] = Prob(state[t]=s) given data and
-                 old model
+            w: w[t,s] = Prob(state[t]=s) given data and old model
         """
 
         # Loop over range of allowed values of y
@@ -539,10 +542,10 @@ class Observation:
 
 
 class Prob(numpy.ndarray):
-    """Subclass of ndarray for probability matrices.  P[a,b] is the
-    probability of b given a.  The class has additional methods and is
-    designed to enable alternative implementations that run faster or
-    in less memory but may be implemented by uglier code.
+    """Subclass of ndarray for conditional probability matrices.  P[a,b]
+    is the probability of b given a.  The class has additional methods
+    and is designed to enable alternative implementations that run
+    faster or in less memory but may be implemented by uglier code.
 
     """
 
@@ -550,7 +553,7 @@ class Prob(numpy.ndarray):
         """ Return a Prob instance of the argument.
 
         Args:
-            x: An array of probabilities
+            x: An array of conditional probabilities
 
         """
         assert len(x.shape) == 2
@@ -600,27 +603,27 @@ class Prob(numpy.ndarray):
         then this function returns the likelihood for each state given
         the observation at a particular time.  Given T = len(v) and
         self.shape = (M,N), this returns L with L.shape = (T,M) and L[t,a] =
-        Prob(v[t]|a) \forall t \in [0,T) and a in [0,M).
+        Prob(v[t]|a) \forall t \in [0:T] and a in [0:M].
 
         """
         return self[:, v].T
 
-    def cost(self: Prob, nu: numpy.ndarray, py: numpy.ndarray):
+    def utility(self: Prob, nu: numpy.ndarray, py: numpy.ndarray):
         """Efficient calculation of numpy.outer(nu, py)*self (where * is
         element-wise)
 
         Args:
-            nu:  Cost of minimum cost path to each state
+            nu:  Utility of maximum utility path to each state
             py: Likelihood of each state given data y[t]
         Returns:
-            Minimum costs for sequences ending in state pairs
+            Maximum utilities for sequences ending in state pairs
 
         Used in Viterbi decoding with self[a,b] =
-        Prob(s[t+1]=b|s[t]=a).  If nu[a] = minimum cost of s[t-1]=a
-        given the data y_0^{t-1} and py[b] = Probability observation =
+        Prob(s[t+1]=b|s[t]=a).  If nu[a] = maximum utility of s[t-1]=a
+        given the data y[0:t] and py[b] = Probability observation =
         y[t] given s[t]=b, then this method returns a 2-d array, C,
-        with C[a,b] = cost of minimum cost path ending with s[t-1]=a,
-        s[t]=b given observations y_0^t.
+        with C[a,b] = utility of maximum utility path ending with s[t-1]=a,
+        s[t]=b given observations y[0:t+1].
 
         """
         return (self.T * nu).T * py
@@ -632,10 +635,10 @@ class Prob(numpy.ndarray):
             alpha (numpy.ndarray):  Alpha[t]
 
         Used in forward algorithm.  In the vector argument
-        alpha[a]=Probability(s[t]=a|y_0^t).  The resulting value is a
-        vector A with A[a] = Probability(s[t+1]=a|y_0^t).
+        alpha[a]=Probability(s[t]=a|y[0:t+1]).  The resulting value is a
+        vector A with A[a] = Probability(s[t+1]=a|y[0:t+1]).
 
-        Not done inline because c version is better than inline
+        Not done inline because function written in c is better
 
         """
         alpha[:] = numpy.dot(alpha, self)
@@ -653,7 +656,7 @@ class Prob(numpy.ndarray):
         observation at time t.  The calculation here applies the
         conditional state probability matrix backwards.
 
-        Not done inline because c version is better than inline
+        Not done inline because function written in c is better
 
         """
         b[:] = numpy.dot(self, b)

@@ -53,10 +53,11 @@ class Parent(unittest.TestCase):
         self.model_b.y_mod.observe((self.y_train,))
 
         # Exercises calculate and reestimate
-        rv = numpy.array(self.model_b.train((self.y_train,), n_iterations=15))
+        rv = numpy.array(
+            self.model_b.multi_train((self.y_train,), n_iterations=100))
 
         difference = rv[1:] - rv[:-1]
-        self.assertTrue(difference.min() > 0)  # Check monotonic
+        self.assertTrue(difference.min() > -1.0e-15)  # Check monotonic
 
     def _str(self, reference_string):
         """ Called by test_str in subclasses
@@ -84,6 +85,17 @@ class TestGauss(Parent):
 
     def test_str(self):
         self._str('instance:\n    mu\n[-1.  1.]\n    var\n[1. 1.]\n')
+
+
+class TestGaussMAP(TestGauss):
+
+    def make_y_mods(self):
+        mu_1 = numpy.array([-1.0, 1.0])
+        var_1 = numpy.ones(2)
+        y_mod_a = hmm.observe_float.GaussMAP(mu_1.copy(), var_1.copy(),
+                                             self.rng)
+        y_mod_b = hmm.observe_float.GaussMAP(mu_1 * 2, var_1 * 4, self.rng)
+        return y_mod_a, y_mod_b
 
 
 class TestMultivariate(Parent):
