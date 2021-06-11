@@ -113,13 +113,7 @@ class TestMultivariate(Parent):
     def test_decode(self):
         self._decode(47)
 
-    def foo_train(self):
-        """ToDo: This test fails because the training is not monotonic at
-        iteration 11.  Perhaps the test is looking for monotonic
-        likelihood but it should be looking at a posteriori
-        probability.
-
-        """
+    def test_train(self):
         self._train()
 
     def test_str(self):
@@ -151,12 +145,6 @@ class TestAutoRegressive(Parent):
         self._decode(42)
 
     def test_train(self):
-        """ToDo: This test fails because the training is not monotonic at
-        iteration 9.  Perhaps the test is looking for monotonic
-        likelihood but it should be looking at a posteriori
-        probability.
-
-        """
         self._train()
 
     def test_str(self):

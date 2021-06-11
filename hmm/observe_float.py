@@ -36,9 +36,8 @@ class Gauss(hmm.base.IntegerObservation):
     r"""Scalar Gaussian observation model
 
     Args:
-        pars: (mu, var) (mu: numpy.ndarray) Means; a value for
-            each state, (var: (numpy.ndarray)) Variances; a value for
-            each state.
+        mu: numpy.ndarray Means; a value for each state
+        variance: numpy.ndarray Variances; a value for each state.
         rng: Generator with state
 
     The probability of observation y given state s is:
@@ -163,23 +162,27 @@ class MultivariateGaussian(hmm.base.Observation_0):
         mu[n_states, dimension]: Mean of distribution for each state
         sigma[n_states, dimension, dimension]: Covariance matrix for each state
         rng: Random number generator with state
-        inverse_wishart_a: Part of prior for covariance matrix
-        inverse_wishart_b: Part of prior for covariance matrix
+        nu: Inverse Wishart parameter
+        Psi: Inverse Wishart parameter
         small: Raise error if total likelihood of any observation is
             less than small
 
-    Without data, sigma[s,i,i] = b/a
+    Implements Maximum a posteriori probability estimation of the
+    variance of each state.  Without data, sigma[s,i,i] =
+    \frac{Psi}{nu + dim +1} where dim is the dimension of the
+    observations
 
     """
     _parameter_keys = "mu sigma".split()
 
     def __init__(  # pylint: disable = super-init-not-called
-        self: MultivariateGaussian,
-        mu: numpy.ndarray,
-        sigma: numpy.ndarray,
-        rng: numpy.random.Generator,
-        inverse_wishart_a=4,
-        inverse_wishart_b=0.1,
+            self: MultivariateGaussian,
+            mu: numpy.ndarray,
+            sigma: numpy.ndarray,
+            rng: numpy.random.Generator,
+            psi:float=.1,
+            Psi:typing.Union[numpy.ndarray,None]=None,
+            nu:float=4,
         small=1.0e-100,
     ):
         # Check arguments
@@ -199,8 +202,10 @@ class MultivariateGaussian(hmm.base.Observation_0):
             self.norm[s] = 1 / numpy.sqrt(
                 (2 * numpy.pi)**self.dimension * determinant)
         self._rng = rng
-        self.inverse_wishart_a = inverse_wishart_a
-        self.inverse_wishart_b = inverse_wishart_b
+        if Psi is None:
+            Psi = numpy.eye(self.dimension)*psi
+        self.Psi = Psi
+        self.nu = nu
         self.small = small
 
     def random_out(  # pylint: disable = arguments-differ
@@ -259,19 +264,25 @@ self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
         y = self._y
         wsum = w.sum(axis=0)
         self.mu = (numpy.inner(y.T, w.T) / wsum).T
-        # Inverse Wishart prior parameters.  Without data self.sigma = b/a
         for s in range(self.n_states):
             rrsum = numpy.zeros((self.dimension, self.dimension))
             for t in range(self.n_times):
                 r = y[t] - self.mu[s]
                 rrsum += w[t, s] * numpy.outer(r, r)
-            self.sigma = (self.inverse_wishart_b * numpy.eye(self.dimension) +
-                          rrsum) / (self.inverse_wishart_a + wsum[s])
-            det = numpy.linalg.det(self.sigma)
+            self.sigma[s,:,:] = (self.Psi + rrsum)/(wsum[s] + self.nu + self.dimension + 1)
+            det = numpy.linalg.det(self.sigma[s])
             assert (det > 0.0)
-            self.inverse_sigma[s, :, :] = numpy.linalg.inv(self.sigma)
+            self.inverse_sigma[s, :, :] = numpy.linalg.inv(self.sigma[s])
             self.norm[s] = 1.0 / (numpy.sqrt(
                 (2 * numpy.pi)**self.dimension * det))
+
+    def log_prior(self):
+        return_value = 0.0
+        for s in range(self.n_states):
+            log_det = numpy.log(numpy.linalg.det(self.sigma[s]))
+            trace = numpy.dot(self.Psi, self.inverse_sigma[s]).trace()
+            return_value += -(self.nu + self.dimension + 1)*log_det/2 - trace/2
+        return return_value
 
 
 class AutoRegressive(GaussMAP):
