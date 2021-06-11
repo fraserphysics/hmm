@@ -45,22 +45,22 @@ class Gauss(hmm.base.IntegerObservation):
     Prob(y|s) = 1/\sqrt(2\pi var[s]) exp(-(y-mu[s])^2/(2*var[s])
 
     """
-    _parameter_keys = "mu var".split()
+    _parameter_keys = "mu variance".split()
 
     def __init__(  # pylint: disable = super-init-not-called
         self: Gauss,
         mu: numpy.ndarray,
-        var: numpy.ndarray,
+        variance: numpy.ndarray,
         rng: numpy.random.Generator,
     ):
-        assert len(var) == len(mu)
+        assert len(variance) == len(mu)
         self.mu = mu
-        self.var = var
-        self.sigma = numpy.sqrt(var)
+        self.variance = variance
+        self.sigma = numpy.sqrt(variance)
         self._rng = rng
         self.dtype = [numpy.float64]
-        self.norm = 1 / numpy.sqrt(2 * numpy.pi * var)
-        self.n_states = len(var)
+        self.norm = 1 / numpy.sqrt(2 * numpy.pi * variance)
+        self.n_states = len(variance)
 
     # Ignore: Super returned int
     def random_out(  # type: ignore
@@ -87,7 +87,7 @@ class Gauss(hmm.base.IntegerObservation):
         """
         assert self._y.reshape((-1, 1)).shape == (self.n_times, 1)
         d = self.mu - self._y.reshape((-1, 1))
-        self._likelihood = numpy.exp(-d * d / (2 * self.var)) * self.norm
+        self._likelihood = numpy.exp(-d * d / (2 * self.variance)) * self.norm
         return self._likelihood
 
     def diffs_to_var(self: Gauss, diffs: numpy.ndarray, wsum: float) -> float:
@@ -122,9 +122,9 @@ class Gauss(hmm.base.IntegerObservation):
         wsum = w.sum(axis=0)
         self.mu = (w.T * y).sum(axis=1) / wsum
         diffs = (self.mu - y.reshape((-1, 1))) * numpy.sqrt(w)
-        self.var = self.diffs_to_var(diffs, wsum)
-        self.sigma = numpy.sqrt(self.var)
-        self.norm = 1 / numpy.sqrt(2 * numpy.pi * self.var)
+        self.variance = self.diffs_to_var(diffs, wsum)
+        self.sigma = numpy.sqrt(self.variance)
+        self.norm = 1 / numpy.sqrt(2 * numpy.pi * self.variance)
 
 
 class GaussMAP(Gauss):
@@ -135,11 +135,11 @@ class GaussMAP(Gauss):
 
     def __init__(self: GaussMAP,
                  mu: numpy.ndarray,
-                 var: numpy.ndarray,
+                 variance: numpy.ndarray,
                  rng: numpy.random.generator,
                  alpha: float = 1,
                  beta: float = 1):
-        super().__init__(mu, var, rng)
+        super().__init__(mu, variance, rng)
         self.alpha = alpha
         self.beta = beta
 
@@ -147,7 +147,7 @@ class GaussMAP(Gauss):
         return_value = 0.0
         for s in range(self.n_states):
             return_value += -(self.alpha + 1) * numpy.log(
-                self.var[s]) - self.beta / self.var[s]
+                self.variance[s]) - self.beta / self.variance[s]
         return return_value
 
     def diffs_to_var(self: GaussMAP, diffs: numpy.ndarray, wsum: float):
@@ -274,15 +274,15 @@ self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
                 (2 * numpy.pi)**self.dimension * det))
 
 
-class AutoRegressive(hmm.base.Observation_0):
+class AutoRegressive(GaussMAP):
     r"""Scalar autoregressive model with Gaussian residuals
 
     Args:
         ar_coefficients[n_states, ar_order]: Auto-regressive coefficients
         variance[n_states]: Residual variance for each state
         rng: Random number generator with state
-        inverse_wishart_a: Part of prior for variance
-        inverse_wishart_b: Part of prior for variance
+        alpha: Part of prior for variance
+        beta: Part of prior for variance
         small: Throw error if likelihood at any time is less than small
 
     Model: likelihood[t,s] = Normal(mu_{t,s}, var[s]) at _y[t]
@@ -301,8 +301,8 @@ class AutoRegressive(hmm.base.Observation_0):
             offset: numpy.ndarray,
             variance: numpy.ndarray,
             rng: numpy.random.Generator,
-            inverse_wishart_a: float = 4.0,
-            inverse_wishart_b: float = 16.0,
+            alpha: float = 4.0,
+            beta: float = 16.0,
             small: float = 1.0e-100):
         assert len(variance.shape) == 1
         assert len(offset.shape) == 1
@@ -326,8 +326,8 @@ class AutoRegressive(hmm.base.Observation_0):
         for s in range(self.n_states):
             self.norm[s] = 1 / numpy.sqrt(2 * numpy.pi * self.variance[s])
         self._rng = rng
-        self.inverse_wishart_a = inverse_wishart_a
-        self.inverse_wishart_b = inverse_wishart_b
+        self.alpha = alpha
+        self.beta = beta
         self.small = small
 
     def initialize_out(self: AutoRegressive):
@@ -404,14 +404,6 @@ class AutoRegressive(hmm.base.Observation_0):
         """
         assert self._y.shape == (self.n_times,)
 
-        log_prob_model = 0
-        for s in range(self.n_states):
-            log_prob_model -= numpy.log(self.variance[
-                s]) * self.inverse_wishart_a / 2 + self.inverse_wishart_b / (
-                    2 * self.variance[s])
-        factor = numpy.exp(log_prob_model / self.n_times)
-        factor = 1.0
-
         for t in range(self.n_times):
             delta = self._y[t] - numpy.dot(self.ar_coefficients_offset,
                                            self.context[t])
@@ -430,7 +422,6 @@ class AutoRegressive(hmm.base.Observation_0):
             if self._likelihood[t, :].sum() < self.small:
                 raise ValueError("""Observation is not plausible from any state.
 self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
-            self._likelihood *= factor
         return self._likelihood
 
     def reestimate(
@@ -461,8 +452,9 @@ self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
             self.ar_coefficients_offset[s, :] = fit
             delta = w_y - numpy.inner(w_context, fit)
             sum_squared_error = numpy.inner(delta, delta)
-            self.variance[s] = (self.inverse_wishart_b + sum_squared_error) / (
-                self.inverse_wishart_a + wsum[s])
+            numerator = 2 * self.beta + numpy.inner(delta, delta)
+            denominator = 2 * self.alpha + 2 + wsum[s]
+            self.variance[s] = numerator / denominator
             self.norm[s] = 1 / numpy.sqrt(2 * numpy.pi * self.variance[s])
 
 

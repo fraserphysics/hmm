@@ -84,7 +84,7 @@ class TestGauss(Parent):
         self._train()
 
     def test_str(self):
-        self._str('instance:\n    mu\n[-1.  1.]\n    var\n[1. 1.]\n')
+        self._str('instance:\n    mu\n[-1.  1.]\n    variance\n[1. 1.]\n')
 
 
 class TestGaussMAP(TestGauss):
@@ -150,7 +150,7 @@ class TestAutoRegressive(Parent):
     def test_decode(self):
         self._decode(42)
 
-    def foo_train(self):
+    def test_train(self):
         """ToDo: This test fails because the training is not monotonic at
         iteration 9.  Perhaps the test is looking for monotonic
         likelihood but it should be looking at a posteriori
