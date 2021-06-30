@@ -4,10 +4,10 @@ hmm.tests package
 Submodules
 ----------
 
-hmm.tests.test\_scalar module
+hmm.tests.test\_simple module
 -----------------------------------------
 
-.. automodule:: hmm.tests.test_scalar
+.. automodule:: hmm.tests.test_simple
    :members:
    :undoc-members:
    :show-inheritance:

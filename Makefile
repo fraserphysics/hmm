@@ -5,6 +5,11 @@ docs/api/build/html/index.html : docs/api/source/conf.py
 	pushd docs/api; rm -rf build; make html; popd
 	@echo To view: firefox --no-remote docs/api/build/html/index.html
 
+## docs/manual/build/html/index.html : User documentation
+docs/manual/build/html/index.html : docs/api/source/conf.py
+	pushd docs/manual; rm -rf build; make html; popd
+	@echo To view: firefox --no-remote docs/manual/build/html/index.html
+
 ## gpl.txt                        : License for distributing the hmm software
 gpl.txt:
 	wget https://www.gnu.org/licenses/gpl-3.0.txt -O $@
@@ -37,6 +42,7 @@ yapf :
 .PHONY : test_standards
 test_standards :
 	pytest test_coding_standards.py
+# Debug with: "pylint --rcfile=pylintrc hmm" and "cd docs/api; make html"
 
 ## pylintrc                       : Fetch Google's rules for python style
 pylintrc:

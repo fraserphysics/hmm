@@ -423,7 +423,7 @@ class HMM(hmm.simple.HMM):
 
             # Record/report/check this iteration
             if hasattr(self.y_mod, 'log_prior'):
-                utility = sum_log_like + self.y_mod.log_prior()
+                utility = sum_log_like + self.y_mod.log_prior()  # type: ignore
             else:
                 utility = sum_log_like
             utility_list.append(utility / self.n_times)
@@ -515,15 +515,13 @@ class Observation_with_bundles(Observation_0):
         rng: A numpy.random.Generator for simulation
         small: Threshold for plausible sum of state likelihoods at a time
 
-    Attributes:
-
-    underlying_model:  Provides methods for observations without bundle tags
-    bundle2state: A dict with bundle2state[i_bundle] = list of states
-    n_bundle:
-    n_states:
-    bundle_and_state: A boolean array with state in bundle <=>
-         bundle_and_state[i_bundle, i_state] = True
-    state2bundle: i_bundle = state2bundle[i_state] with state in bundle
+    :ivar underlying_model:  Provides methods for observations without bundle tags
+    :ivar bundle2state: A dict with bundle2state[i_bundle] = list of states
+    :ivar n_bundle:
+    :ivar n_states:
+    :ivar bundle_and_state: A boolean array with state in bundle <=>
+                            bundle_and_state[i_bundle, i_state] = True
+    :ivar state2bundle: i_bundle = state2bundle[i_state] with state in bundle
     """
     _parameter_keys = 'underlying_model bundle2state'.split()
 

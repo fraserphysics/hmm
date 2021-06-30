@@ -135,7 +135,7 @@ class GaussMAP(Gauss):
     def __init__(self: GaussMAP,
                  mu: numpy.ndarray,
                  variance: numpy.ndarray,
-                 rng: numpy.random.generator,
+                 rng: numpy.random.Generator,
                  alpha: float = 1,
                  beta: float = 1):
         super().__init__(mu, variance, rng)
@@ -176,13 +176,13 @@ class MultivariateGaussian(hmm.base.Observation_0):
     _parameter_keys = "mu sigma".split()
 
     def __init__(  # pylint: disable = super-init-not-called
-            self: MultivariateGaussian,
-            mu: numpy.ndarray,
-            sigma: numpy.ndarray,
-            rng: numpy.random.Generator,
-            psi:float=.1,
-            Psi:typing.Union[numpy.ndarray,None]=None,
-            nu:float=4,
+        self: MultivariateGaussian,
+        mu: numpy.ndarray,
+        sigma: numpy.ndarray,
+        rng: numpy.random.Generator,
+        psi: float = .1,
+        Psi: typing.Union[numpy.ndarray, None] = None,
+        nu: float = 4,
         small=1.0e-100,
     ):
         # Check arguments
@@ -203,7 +203,7 @@ class MultivariateGaussian(hmm.base.Observation_0):
                 (2 * numpy.pi)**self.dimension * determinant)
         self._rng = rng
         if Psi is None:
-            Psi = numpy.eye(self.dimension)*psi
+            Psi = numpy.eye(self.dimension) * psi
         self.Psi = Psi
         self.nu = nu
         self.small = small
@@ -269,7 +269,8 @@ self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
             for t in range(self.n_times):
                 r = y[t] - self.mu[s]
                 rrsum += w[t, s] * numpy.outer(r, r)
-            self.sigma[s,:,:] = (self.Psi + rrsum)/(wsum[s] + self.nu + self.dimension + 1)
+            self.sigma[s, :, :] = (self.Psi + rrsum) / (wsum[s] + self.nu +
+                                                        self.dimension + 1)
             det = numpy.linalg.det(self.sigma[s])
             assert (det > 0.0)
             self.inverse_sigma[s, :, :] = numpy.linalg.inv(self.sigma[s])
@@ -281,7 +282,8 @@ self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
         for s in range(self.n_states):
             log_det = numpy.log(numpy.linalg.det(self.sigma[s]))
             trace = numpy.dot(self.Psi, self.inverse_sigma[s]).trace()
-            return_value += -(self.nu + self.dimension + 1)*log_det/2 - trace/2
+            return_value += -(self.nu + self.dimension +
+                              1) * log_det / 2 - trace / 2
         return return_value
 
 
@@ -435,9 +437,10 @@ class AutoRegressive(GaussMAP):
 self.likelihood[{0},:]={1}""".format(t, self._likelihood[t, :]))
         return self._likelihood
 
-    def reestimate(
-        self: AutoRegressive,
-        w: numpy.ndarray,
+    # mypy objects: "incompatible with supertype Integerobservation"
+    def reestimate(  # type: ignore
+            self: AutoRegressive,
+            w: numpy.ndarray,
     ):
         """
         Estimate new model parameters.  self._y already assigned

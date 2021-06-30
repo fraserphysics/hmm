@@ -11,10 +11,10 @@ Subpackages
 Submodules
 ----------
 
-hmm.scalar module
+hmm.simple module
 -----------------------------
 
-.. automodule:: hmm.scalar
+.. automodule:: hmm.simple
    :members:
    :undoc-members:
    :show-inheritance:
