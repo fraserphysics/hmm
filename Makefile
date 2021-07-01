@@ -10,8 +10,8 @@ docs/manual/build/html/index.html : docs/api/source/conf.py
 	pushd docs/manual; rm -rf build; make html; popd
 	@echo To view: firefox --no-remote docs/manual/build/html/index.html
 
-## gpl.txt                        : License for distributing the hmm software
-gpl.txt:
+## LICENSE.txt                    : gpl-3.0 License for distributing the hmm software
+LICENSE.txt:
 	wget https://www.gnu.org/licenses/gpl-3.0.txt -O $@
 
 ## test                           : Discover and run all tests in hmm
@@ -22,7 +22,8 @@ test :
 ## check-types                    : Checks type hints
 .PHONY : check-types
 check-types:
-	mypy hmm/
+	mypy --no-strict-optional hmm/
+# --no-strict-optional allows None as default value
 
 
 ## coverage                       : make test coverage report in htmlcov/

@@ -257,7 +257,7 @@ Training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4}
         self.alpha *= self.beta  # Saves allocating a new array for
         alpha_beta = self.alpha  # the result
 
-        self.p_state_time_average = alpha_beta.sum(axis=0)
+        self.p_state_time_average = alpha_beta.sum(axis=0)  # type: ignore
         self.p_state_initial = numpy.copy(alpha_beta[0])
         for x in (self.p_state_time_average, self.p_state_initial):
             x /= x.sum()
@@ -315,7 +315,7 @@ Training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4}
         for t in range(self.n_times - 1, -1, -1):
             best_state_sequence[t] = previous_best_state
             previous_best_state = best_predecessors[t, previous_best_state]
-        return best_state_sequence.flat
+        return best_state_sequence.reshape(-1)
 
     def state_simulate(
         self: HMM,
@@ -349,9 +349,9 @@ Training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4}
 
         try:
             state_sequence = self.decode(None)
-        except (ValueError):
-            raise ValueError(
-                "State_simulate given an impossible mask constraint")
+        except ValueError as e:
+            raise Exception(
+                "State_simulate given an impossible mask constraint") from e
 
         return state_sequence
 
@@ -390,7 +390,7 @@ Training is not monotonic: LLps[{0}]={1} and LLps[{2}]={3} difference={4}
             states.append(state)
             outs.append(self.y_mod.random_out(state))
             state = cum_rand(cumulative_transition[state])
-        return states, outs
+        return numpy.array(states), numpy.array(outs)
 
     def link(self: HMM, here: int, there: int, p: float):
         """Create (or remove) a link between state "here" and state "there".
@@ -473,7 +473,6 @@ class Observation:
             self._rng = rng
         self._cummulative_y = numpy.cumsum(self._py_state, axis=1)
         self.n_states = len(self._py_state)
-        self._likelihood = None
 
     def observe(self: Observation, y) -> int:
         """ Attach measurement sequence[s] to self.

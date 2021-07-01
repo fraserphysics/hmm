@@ -26,11 +26,20 @@ likelihoods.
 
 HMM includes implementations of the following observation models:
 
-Discrete: Integers in a finite range
+IntegerObservation: Integers in a finite range
 
 Gauss: Floats with state dependent mean and variance
 
-Class_Y: Observations that can include classification data
+GaussMAP: Like Gauss but uses maximum a posteriori probability
+estimation
+
+MultivariateGaussian: Like GaussMAP but observations are vectors of
+floats
+
+AutoRegressive: Like GaussMAP but with linear autoregressive forecast
+and Gaussian residual
+
+Observation_with_bundles: Observations that can include classification data
 
 I (Andy Fraser) restarted this project on 2021-01-22.  I will rewrite
 the code for my book "Hidden Markov Models and Dynamical Systems"

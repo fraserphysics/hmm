@@ -258,7 +258,7 @@ class HMM(hmm.simple.HMM):
         self.alpha *= self.beta  # Saves allocating a new array for
         alpha_beta = self.alpha  # the result
 
-        self.p_state_time_average = alpha_beta.sum(axis=0)
+        self.p_state_time_average = alpha_beta.sum(axis=0)  # type: ignore
         self.p_state_initial = numpy.copy(alpha_beta[0])
         for x in (self.p_state_time_average, self.p_state_initial):
             x /= x.sum()
@@ -552,7 +552,7 @@ class Observation_with_bundles(Observation_0):
 
         # bundle_and_state[bundle_id, state_id] is true iff state \in bundle.
         self.bundle_and_state = numpy.zeros((self.n_bundle, self.n_states),
-                                            numpy.bool)
+                                            bool)
 
         # state2bundle[state_id] = bundle_id for bundle that contains state
         self.state2bundle = numpy.ones(self.n_states, dtype=numpy.int32) * -1
@@ -577,7 +577,8 @@ class Observation_with_bundles(Observation_0):
 
         """
         # pylint: disable = attribute-defined-outside-init
-        self._y, self.t_seg = self._concatenate(bundle_segment_list)
+        self._y, self.t_seg = self._concatenate(  # type: ignore
+            bundle_segment_list)
         self.n_times = self.t_seg[-1]
         self.underlying_model.observe([self._y.y])
         return self.t_seg
@@ -614,7 +615,8 @@ class Observation_with_bundles(Observation_0):
         """
         return self.state2bundle[state], self.underlying_model.random_out(state)
 
-    def merge(self: Observation_with_bundles, raw_outs: list) -> Bundle_segment:
+    def merge(  # type: ignore
+            self: Observation_with_bundles, raw_outs: list) -> Bundle_segment:
         """ Merge isolated pairs (bundle, y) into an Observation_with_bundles.
 
         Args:

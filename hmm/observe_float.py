@@ -89,7 +89,9 @@ class Gauss(hmm.base.IntegerObservation):
         self._likelihood = numpy.exp(-d * d / (2 * self.variance)) * self.norm
         return self._likelihood
 
-    def diffs_to_var(self: Gauss, diffs: numpy.ndarray, wsum: float) -> float:
+    # ToDo: Why do I need Any to make mypy happy?
+    def diffs_to_var(self: Gauss, diffs: numpy.ndarray,
+                     wsum: typing.Any) -> typing.Any:
         """ Formula for reestimating variance.
 
         Args:
@@ -349,8 +351,12 @@ class AutoRegressive(GaussMAP):
         self.history = numpy.zeros(self.ar_order + 1)
         self.history[-1] = 1.0
 
-    def random_out(  # pylint: disable = arguments-differ
-            self: AutoRegressive, s: int) -> numpy.ndarray:
+    # ToDo: Better way to have different arguments for method of
+    # subclass without mypy or pylint complaints
+    def random_out(  # type: ignore
+            # pylint: disable = arguments-differ
+            self: AutoRegressive,
+            s: int) -> numpy.ndarray:
         mu = numpy.dot(self.history, self.ar_coefficients_offset[s])
         rv = self._rng.normal(mu, self.variance[s])
         self.history[:self.ar_order - 1] = self.history[1:self.ar_order]

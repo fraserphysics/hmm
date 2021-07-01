@@ -46,7 +46,7 @@ class BaseClass(unittest.TestCase):
         """ This code is executed once per test class
         """
         # cls._py_state = scipy.linalg.circulant([0.4, 0, 0, 0, 0.3, 0.3])
-        cls.mask = numpy.ones((cls.n_times, cls.n_states), numpy.bool)
+        cls.mask = numpy.ones((cls.n_times, cls.n_states), bool)
         for t in range(cls.n_times):
             cls.mask[t, t % cls.n_states] = False
 
