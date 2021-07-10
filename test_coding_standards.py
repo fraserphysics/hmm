@@ -35,7 +35,8 @@ class Test_lint(BaseClass):
         rcfile_path = os.path.join(self.root, 'pylintrc')
         args = [
             'pylint', '--rcfile={0}'.format(rcfile_path),
-            os.path.join(self.root, 'hmm')
+            os.path.join(self.root, 'hmm'),
+            os.path.join(self.root, 'tests')
         ]
         with subprocess.Popen(args,
                               cwd=self.root,

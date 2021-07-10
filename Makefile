@@ -17,22 +17,20 @@ LICENSE.txt:
 ## test                           : Discover and run all tests in hmm
 .PHONY : test
 test :
-	pytest hmm
+	pytest tests
 
 ## check-types                    : Checks type hints
 .PHONY : check-types
 check-types:
-	mypy --no-strict-optional hmm/
+	mypy --no-strict-optional hmm/ tests/
 # --no-strict-optional allows None as default value
-
 
 ## coverage                       : make test coverage report in htmlcov/
 .PHONY : coverage
 coverage :
 	rm -rf .coverage htmlcov
-	coverage run -m pytest hmm/tests/
+	coverage run -m pytest tests
 	coverage html  --omit=/nix/store*
-
 
 ## yapf                           : Force google format on all python code
 .PHONY : yapf
@@ -43,7 +41,7 @@ yapf :
 .PHONY : test_standards
 test_standards :
 	pytest test_coding_standards.py
-# Debug with: "pylint --rcfile=pylintrc hmm" and "cd docs/api; make html"
+# Debug with: "pylint --rcfile=pylintrc hmm tests" and "cd docs/api; make html"
 
 ## pylintrc                       : Fetch Google's rules for python style
 pylintrc:

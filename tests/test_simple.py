@@ -13,7 +13,7 @@ import numpy
 import numpy.testing
 import numpy.random
 
-import scipy.linalg
+import scipy.linalg  # type: ignore
 
 import hmm.simple
 

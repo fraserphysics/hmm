@@ -10,11 +10,11 @@ import numpy
 import numpy.testing
 import numpy.random
 
-import scipy.linalg
+import scipy.linalg  # type: ignore
 
 import hmm.base
 import hmm.simple
-import hmm.tests.test_simple
+import tests.test_simple
 
 
 class TestObservations(unittest.TestCase):
@@ -71,7 +71,7 @@ class TestObservations(unittest.TestCase):
         self.assertTrue(isinstance(self.y_mod_base.__str__(), str))
 
 
-class BaseClass(hmm.tests.test_simple.BaseClass):
+class BaseClass(tests.test_simple.BaseClass):
     bundle2state = {0: [0, 1, 2], 1: [3], 2: [4, 5]}
 
 

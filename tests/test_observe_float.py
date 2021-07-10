@@ -8,7 +8,7 @@ import unittest
 import numpy
 import numpy.testing
 
-import scipy.linalg
+import scipy.linalg  # type: ignore
 
 import hmm.observe_float
 import hmm.base
