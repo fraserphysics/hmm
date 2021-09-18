@@ -1,13 +1,29 @@
 SHELL = bash  # To make popd available
 
+help:
+
+## docs                           : Make all the docmentation
+.PHONY: docs
+docs: docs/api/build/html/index.html docs/manual/build/html/index.html
+
+## doc_server                     : Start doc server on https://localhost:8000
+.PHONY: doc_server
+doc_server:
+	sphinx-autobuild --ignore docs/manual/build/ docs/manual/source/ docs/manual/build/html
+
+## doc_server                     : Start API doc server on https://localhost:8000
+.PHONY: doc_server_api
+doc_server_api:
+	sphinx-autobuild --ignore docs/api/build/ docs/api/source/ docs/api/build/html
+
 ## docs/api/build/html/index.html : Documentation for the api
 docs/api/build/html/index.html : docs/api/source/conf.py
-	pushd docs/api; rm -rf build; make html; popd
+	cd docs/api; rm -rf build; make html
 	@echo To view: firefox --no-remote docs/api/build/html/index.html
 
 ## docs/manual/build/html/index.html : User documentation
 docs/manual/build/html/index.html : docs/api/source/conf.py
-	pushd docs/manual; rm -rf build; make html; popd
+	cd docs/manual; rm -rf build; make html
 	@echo To view: firefox --no-remote docs/manual/build/html/index.html
 
 ## LICENSE.txt                    : gpl-3.0 License for distributing the hmm software
@@ -15,9 +31,13 @@ LICENSE.txt:
 	wget https://www.gnu.org/licenses/gpl-3.0.txt -O $@
 
 ## test                           : Discover and run all tests in hmm
-.PHONY : test
+.PHONY : test, test_all
 test :
-	pytest tests
+	pytest
+
+## test_all                       : Test against all supported versions of python
+test_all:
+	nox
 
 ## check-types                    : Checks type hints
 .PHONY : check-types
