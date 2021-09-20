@@ -14,12 +14,11 @@ import scipy.linalg  # type: ignore
 
 import hmm.base
 import hmm.simple
-import tests.test_simple
+from . import test_simple
 
 
 class TestObservations(unittest.TestCase):
-    """ Test Observation in modules simple and base
-    """
+    """Test Observation in modules simple and base"""
 
     def setUp(self):
         self.numpy_rng = numpy.random.default_rng(0)  # 0 is seed
@@ -35,8 +34,7 @@ class TestObservations(unittest.TestCase):
         self.w[0, :] = [1, 0, 0]
         self.w[3, :] = [0, 1, 0]
         self.ys = (y[5:], y[3:7], y[:4])
-        self.y_mod_base = hmm.base.IntegerObservation(p_ys.copy(),
-                                                      self.numpy_rng)
+        self.y_mod_base = hmm.base.IntegerObservation(p_ys.copy(), self.numpy_rng)
         self.y_mod_simple = hmm.simple.Observation(p_ys.copy(), self.numpy_rng)
         # discrete model and observations from base
         self.y_mod_y_base = (self.y_mod_base, (self.y64,))
@@ -60,8 +58,9 @@ class TestObservations(unittest.TestCase):
         y_mod.observe(y)
         y_mod.calculate()
         y_mod.reestimate(self.w)
-        numpy.testing.assert_almost_equal([[1, 0], [0, 1], [5 / 9, 4 / 9]],
-                                          y_mod._py_state.values())
+        numpy.testing.assert_almost_equal(
+            [[1, 0], [0, 1], [5 / 9, 4 / 9]], y_mod._py_state.values()
+        )
 
     def test_reestimate(self):
         for y_mod, y in (self.y_mod_y_base, self.y_mod_y_simple):
@@ -71,13 +70,12 @@ class TestObservations(unittest.TestCase):
         self.assertTrue(isinstance(self.y_mod_base.__str__(), str))
 
 
-class BaseClass(tests.test_simple.BaseClass):
+class BaseClass(test_simple.BaseClass):
     bundle2state = {0: [0, 1, 2], 1: [3], 2: [4, 5]}
 
 
 class TestHMM(BaseClass):
-    """ Test hmm.base.HMM
-    """
+    """Test hmm.base.HMM"""
 
     def setUp(self):
         self.y_class = hmm.base.IntegerObservation
@@ -98,7 +96,8 @@ class TestHMM(BaseClass):
 
         # Setup for other tests with bundle_observation
         bundle_observation = hmm.base.Observation_with_bundles(
-            simple_observation, self.bundle2state, self.rng)
+            simple_observation, self.bundle2state, self.rng
+        )
         self.base_hmm = hmm.base.HMM(
             self.p_state_initial.copy(),  # Initial distribution of states
             self.p_state_initial.copy(),  # Stationary distribution of states
@@ -110,11 +109,12 @@ class TestHMM(BaseClass):
         self.y = [observations] * 5
 
     def test_initialize_y_model(self):
-        """ Also exercises self.mod.state_simulate.
-        """
+        """Also exercises self.mod.state_simulate."""
         # Need .copy() because initialize_y_model modifies _py_state
-        difference = self.simple_hmm.y_mod._py_state.copy(
-        ) - self.simple_hmm.initialize_y_model(self.simple_y)._py_state
+        difference = (
+            self.simple_hmm.y_mod._py_state.copy()
+            - self.simple_hmm.initialize_y_model(self.simple_y)._py_state
+        )
         self.assertTrue(difference.max() > 0.01)
         zero = difference.sum(axis=1)
         self.assertTrue(zero.max() < 1e-9)  # Rows of each should sum to one
@@ -141,28 +141,24 @@ class TestHMM(BaseClass):
         self.assertTrue(self.base_hmm.forward(t_skip=5) > -2000.0)
 
     def test_multi_train(self):
-        """ Test training
-        """
-        log_like = self.base_hmm.multi_train(self.y,
-                                             n_iterations=10,
-                                             display=False)
+        """Test training"""
+        log_like = self.base_hmm.multi_train(self.y, n_iterations=10, display=False)
         # Check that log likelihood increases montonically
         for i in range(1, len(log_like)):
-            self.assertTrue(
-                log_like[i - 1] < log_like[i] + 1e-14)  # Todo: fudge?
+            self.assertTrue(log_like[i - 1] < log_like[i] + 1e-14)  # Todo: fudge?
         # Check that trained model is close to true model
         numpy.testing.assert_allclose(
             self.base_hmm.y_mod.underlying_model._py_state.values(),
             self._py_state,
-            atol=0.15)
-        numpy.testing.assert_allclose(self.base_hmm.p_state2state.values(),
-                                      self.p_state2state,
-                                      atol=0.15)
+            atol=0.15,
+        )
+        numpy.testing.assert_allclose(
+            self.base_hmm.p_state2state.values(), self.p_state2state, atol=0.15
+        )
 
 
 class TestObservation_with_bundles(BaseClass):
-    """ Test hmm.base.Observation_with_bundles
-    """
+    """Test hmm.base.Observation_with_bundles"""
 
     def setUp(self):
         self.y_class = hmm.base.IntegerObservation
@@ -170,12 +166,12 @@ class TestObservation_with_bundles(BaseClass):
         self.rng = numpy.random.default_rng(0)
 
         self.Observation_with_bundles = hmm.base.Observation_with_bundles(
-            self.y_class(self.p_ys, self.rng), self.bundle2state, self.rng)
+            self.y_class(self.p_ys, self.rng), self.bundle2state, self.rng
+        )
 
         # outs[t] = (bundle[t], y[t])
         outs = [
-            self.Observation_with_bundles.random_out(s)
-            for s in range(len(self.p_ys))
+            self.Observation_with_bundles.random_out(s) for s in range(len(self.p_ys))
         ]
 
         bundles = [out[0] for out in outs]
@@ -184,8 +180,9 @@ class TestObservation_with_bundles(BaseClass):
 
     def test_bundle_segment_str(self):
         self.assertTrue(
-            str(self.data[0]) ==
-            'y values:[1, 1, 2, 3, 5, 5]\nbundle values:[0, 0, 0, 1, 2, 2]\n')
+            str(self.data[0])
+            == "y values:[1, 1, 2, 3, 5, 5]\nbundle values:[0, 0, 0, 1, 2, 2]\n"
+        )
 
     def test_bundle_segment_len(self):
         self.assertTrue(len(self.data[0]) == 6)
@@ -198,7 +195,7 @@ class TestObservation_with_bundles(BaseClass):
         self.Observation_with_bundles.observe(self.data)
         result = self.Observation_with_bundles.calculate()
         self.assertTrue(result.min() == 0)
-        self.assertTrue(result.max() > .35)
+        self.assertTrue(result.max() > 0.35)
 
     def test_reestimate(self):
         self.Observation_with_bundles.observe(self.data)
